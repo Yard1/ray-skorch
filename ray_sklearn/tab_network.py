@@ -13,17 +13,15 @@ class TabNetClassifier(TabModel):
         self._default_loss = torch.nn.functional.cross_entropy
         self._default_metric = 'accuracy'
 
-
     def compute_loss(self, y_pred, y_true):
         return self.loss_fn(y_pred, y_true.long())
 
-
     def update_fit_params(
-        self,
-        X_train,
-        y_train,
-        eval_set,
-        weights,
+            self,
+            X_train,
+            y_train,
+            eval_set,
+            weights,
     ):
         output_dim, train_labels = infer_output_dim(y_train)
         for X, y in eval_set:
@@ -32,10 +30,12 @@ class TabNetClassifier(TabModel):
         self._default_metric = ('auc' if self.output_dim == 2 else 'accuracy')
         self.classes_ = train_labels
         self.target_mapper = {
-            class_label: index for index, class_label in enumerate(self.classes_)
+            class_label: index
+            for index, class_label in enumerate(self.classes_)
         }
         self.preds_mapper = {
-            str(index): class_label for index, class_label in enumerate(self.classes_)
+            str(index): class_label
+            for index, class_label in enumerate(self.classes_)
         }
         self.updated_weights = self.weight_updater(weights)
 
@@ -53,13 +53,7 @@ class TabNetRegressor(TabModel):
     def compute_loss(self, y_pred, y_true):
         return self.loss_fn(y_pred, y_true)
 
-    def update_fit_params(
-        self,
-        X_train,
-        y_train,
-        eval_set,
-        weights
-    ):
+    def update_fit_params(self, X_train, y_train, eval_set, weights):
         if len(y_train.shape) != 2:
             msg = "Targets should be 2D : (n_samples, n_regression) " + \
                   f"but y_train.shape={y_train.shape} given.\n" + \

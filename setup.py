@@ -4,7 +4,6 @@ from setuptools import setup, find_packages
 
 ROOT_DIR = os.path.dirname(__file__)
 
-
 setup(
     name="ray_sklearn",
     packages=find_packages(),

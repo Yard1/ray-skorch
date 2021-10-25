@@ -24,10 +24,4 @@ if __name__ == "__main__":
     X, y = data_creator(2000, 5, 10)
 
     reg = TabNetRegressor()
-    reg.fit(
-        X, y,
-        eval_set=[(X, y)],
-        max_epochs=args.max_epochs
-    )
-
-
+    reg.fit(X, y, eval_set=[(X, y)], max_epochs=args.max_epochs)

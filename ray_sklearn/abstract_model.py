@@ -80,7 +80,8 @@ class TabModel(BaseEstimator):
         for var_name, value in kwargs.items():
             if var_name in update_list:
                 try:
-                    exec(f"global previous_val; previous_val = self.{var_name}")
+                    exec(
+                        f"global previous_val; previous_val = self.{var_name}")
                     if previous_val != value:  # noqa
                         wrn_msg = f"Pretraining: {var_name} changed from {previous_val} to {value}"  # noqa
                         warnings.warn(wrn_msg)
@@ -88,26 +89,24 @@ class TabModel(BaseEstimator):
                 except AttributeError:
                     exec(f"self.{var_name} = value")
 
-
-
     def fit(
-        self,
-        X_train,
-        y_train,
-        eval_set=None,
-        eval_name=None,
-        eval_metric=None,
-        loss_fn=None,
-        weights=0,
-        max_epochs=100,
-        patience=10,
-        batch_size=1024,
-        virtual_batch_size=128,
-        num_workers=0,
-        drop_last=False,
-        callbacks=None,
-        pin_memory=True,
-        # from_unsupervised=None,
+            self,
+            X_train,
+            y_train,
+            eval_set=None,
+            eval_name=None,
+            eval_metric=None,
+            loss_fn=None,
+            weights=0,
+            max_epochs=100,
+            patience=10,
+            batch_size=1024,
+            virtual_batch_size=128,
+            num_workers=0,
+            drop_last=False,
+            callbacks=None,
+            pin_memory=True,
+            # from_unsupervised=None,
     ):
         """Train a neural network stored in self.network
         Using train_dataloader for training data and
@@ -181,13 +180,12 @@ class TabModel(BaseEstimator):
         )
 
         # Validate and reformat eval set depending on training data
-        eval_names, eval_set = validate_eval_set(eval_set, eval_name, X_train, y_train)
-
+        eval_names, eval_set = validate_eval_set(eval_set, eval_name, X_train,
+                                                 y_train)
 
         # TODO convert to ray datasets
         train_dataloader, valid_dataloaders = self._construct_loaders(
-            X_train, y_train, eval_set
-        )
+            X_train, y_train, eval_set)
 
         # if from_unsupervised is not None:
         #     # Update parameters to match self pretraining
@@ -200,17 +198,15 @@ class TabModel(BaseEstimator):
         self._set_optimizer_creator()
         self._set_callbacks(callbacks)
 
-
         trainer = Trainer("torch", 2)
-        train_func = self._generate_train_func(train_dataloader, valid_dataloaders, eval_names)
+        train_func = self._generate_train_func(train_dataloader,
+                                               valid_dataloaders, eval_names)
         trainer.start()
         trainer.run(train_func)
         trainer.shutdown()
 
-
-
-    def _generate_train_func(self, train_dataloader, valid_dataloaders, eval_names):
-
+    def _generate_train_func(self, train_dataloader, valid_dataloaders,
+                             eval_names):
         def train_epoch(network, device, optimizer, train_loader):
             """
             Trains one epoch of the network in self.network
@@ -302,7 +298,6 @@ class TabModel(BaseEstimator):
 
             y_true, scores = self.stack_batches(list_y_true, list_y_score)
 
-
             # metrics_logs = self._metric_container_dict[name](y_true, scores)
             network.train()
             # self.history.epoch_metrics.update(metrics_logs)
@@ -334,17 +329,17 @@ class TabModel(BaseEstimator):
 
             return scores
 
-
         def train_func():
             # TODO: This should not require serializing the entire TabModel.
-            use_gpu = False # TODO
+            use_gpu = False  # TODO
 
             network = self._network_creator()
-            device = torch.device(f"cuda:{train.local_rank()}" if use_gpu and
-                                                              torch.cuda.is_available() else "cpu")
+            device = torch.device(f"cuda:{train.local_rank()}" if use_gpu
+                                  and torch.cuda.is_available() else "cpu")
 
             network.to(device)
-            network = DistributedDataParallel(network, find_unused_parameters=True)
+            network = DistributedDataParallel(
+                network, find_unused_parameters=True)
             optimizer = self._optimizer_creator(network)
 
             # # Call method on_train_begin for all callbacks
@@ -361,8 +356,10 @@ class TabModel(BaseEstimator):
 
                 # Apply predict epoch to all eval sets
                 predict_results = []
-                for eval_name, valid_dataloader in zip(eval_names, valid_dataloaders):
-                    r = predict_epoch(network, device, eval_name, valid_dataloader)
+                for eval_name, valid_dataloader in zip(eval_names,
+                                                       valid_dataloaders):
+                    r = predict_epoch(network, device, eval_name,
+                                      valid_dataloader)
                     predict_results.append(r)
                 # print(f"Predict results: {predict_results}")
 
@@ -372,15 +369,12 @@ class TabModel(BaseEstimator):
 
             # # compute feature importance once the best model is defined
             # self._compute_feature_importances(train_dataloader)
+
         return train_func
-
-
-
 
     def load_class_attrs(self, class_attrs):
         for attr_name, attr_value in class_attrs.items():
             setattr(self, attr_name, attr_value)
-
 
     def _set_network_creator(self):
         """Setup the network and explain matrix."""
@@ -430,9 +424,9 @@ class TabModel(BaseEstimator):
         # Set metric container for each sets
         self._metric_container_dict = {}
         for name in eval_names:
-            self._metric_container_dict.update(
-                {name: MetricContainer(metrics, prefix=f"{name}_")}
-            )
+            self._metric_container_dict.update({
+                name: MetricContainer(metrics, prefix=f"{name}_")
+            })
 
         self._metrics = []
         self._metrics_names = []
@@ -441,10 +435,8 @@ class TabModel(BaseEstimator):
             self._metrics_names.extend(metric_container.names)
 
         # Early stopping metric is the last eval metric
-        self.early_stopping_metric = (
-            self._metrics_names[-1] if len(self._metrics_names) > 0 else None
-        )
-
+        self.early_stopping_metric = (self._metrics_names[-1] if
+                                      len(self._metrics_names) > 0 else None)
 
     def _set_callbacks(self, custom_callbacks):
         """Setup the callbacks functions.
@@ -491,13 +483,12 @@ class TabModel(BaseEstimator):
 
     def _set_optimizer_creator(self):
         """Setup optimizer creator."""
+
         def optimizer_creator(network):
-           return self.optimizer_fn(
-                network.parameters(), **self.optimizer_params
-            )
+            return self.optimizer_fn(network.parameters(),
+                                     **self.optimizer_params)
 
         self._optimizer_creator = optimizer_creator
-
 
     def _construct_loaders(self, X_train, y_train, eval_set):
         """Generate dataloaders for train and eval set.
@@ -537,12 +528,10 @@ class TabModel(BaseEstimator):
         )
         return train_dataloader, valid_dataloaders
 
-
     def _update_network_params(self):
         # TODO use this to change network, e.g. through `train_func(config)`
         pass
         # self.network.virtual_batch_size = self.virtual_batch_size
-
 
     @abstractmethod
     def update_fit_params(self, X_train, y_train, eval_set, weights):
@@ -562,8 +551,7 @@ class TabModel(BaseEstimator):
             1 for automated balancing
         """
         raise NotImplementedError(
-            "users must define update_fit_params to use this base class"
-        )
+            "users must define update_fit_params to use this base class")
 
     @abstractmethod
     def compute_loss(self, y_score, y_true):
@@ -583,8 +571,7 @@ class TabModel(BaseEstimator):
             Loss value
         """
         raise NotImplementedError(
-            "users must define compute_loss to use this base class"
-        )
+            "users must define compute_loss to use this base class")
 
     @abstractmethod
     def prepare_target(self, y):
@@ -602,5 +589,4 @@ class TabModel(BaseEstimator):
             Converted target matrix.
         """
         raise NotImplementedError(
-            "users must define prepare_target to use this base class"
-        )
+            "users must define prepare_target to use this base class")
