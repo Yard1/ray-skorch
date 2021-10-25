@@ -5,7 +5,6 @@ from typing import List, Any, Dict
 
 import numpy as np
 import torch
-from pytorch_tabnet import tab_network
 from pytorch_tabnet.callbacks import CallbackContainer
 from pytorch_tabnet.metrics import MetricContainer, check_metrics
 from pytorch_tabnet.utils import (
@@ -15,6 +14,7 @@ from pytorch_tabnet.utils import (
 )
 from ray import train
 from ray.train import Trainer
+from ray_sklearn.models import tabnet as tab_network
 from sklearn.base import BaseEstimator
 from sklearn.utils import check_array
 from torch.nn.parallel import DistributedDataParallel
