@@ -3,7 +3,6 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import List, Any, Dict
 
-import numpy as np
 import torch
 from pytorch_tabnet.callbacks import CallbackContainer
 from pytorch_tabnet.metrics import MetricContainer, check_metrics
@@ -22,7 +21,7 @@ from torch.nn.parallel import DistributedDataParallel
 
 @dataclass
 class TabModel(BaseEstimator):
-    """ Class for TabNet model."""
+    """Class for TabNet model."""
 
     n_d: int = 8
     n_a: int = 8

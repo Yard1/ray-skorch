@@ -17,7 +17,8 @@ if __name__ == "__main__":
         "--max-epochs",
         type=int,
         default=5,
-        help="Sets the number of training epochs. Defaults to 5.")
+        help="Sets the number of training epochs. Defaults to 5.",
+    )
 
     args = parser.parse_args()
 

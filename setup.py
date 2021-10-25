@@ -14,4 +14,5 @@ setup(
     long_description=io.open(
         os.path.join(ROOT_DIR, "README.md"), "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
-    install_requires=open("./requirements.txt").read())
+    install_requires=open("./requirements.txt").read(),
+)
