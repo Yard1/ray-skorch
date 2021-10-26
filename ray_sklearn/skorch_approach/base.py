@@ -1,3 +1,4 @@
+from typing import Callable, Optional
 from ray.train.trainer import Trainer
 from ray import train
 from ray.train.session import get_session
@@ -8,6 +9,20 @@ from torch.nn.parallel.distributed import DistributedDataParallel
 import torch
 from sklearn.base import clone
 import io
+from contextlib import AbstractContextManager
+
+
+class ray_trainer_start_shutdown(AbstractContextManager):
+    def __init__(self, trainer: Trainer,
+                 initialization_hook: Optional[Callable]) -> None:
+        self.trainer = trainer
+        self.initialization_hook = initialization_hook
+
+    def __enter__(self):
+        self.trainer.start(self.initialization_hook)
+
+    def __exit__(self, __exc_type, __exc_value, __traceback) -> bool | None:
+        self.trainer.shutdown()
 
 
 class TrainReportCallback(Callback):
@@ -28,7 +43,7 @@ class TrainReportCallback(Callback):
         if isinstance(keys_ignored, str):
             keys_ignored = [keys_ignored]
         self.keys_ignored_ = set(keys_ignored or [])
-        self.keys_ignored_.add('batches')
+        self.keys_ignored_.add("batches")
         return self
 
     def _sorted_keys(self, keys):
@@ -43,24 +58,24 @@ class TrainReportCallback(Callback):
         """
         sorted_keys = []
 
-        # make sure 'epoch' comes first
-        if ('epoch' in keys) and ('epoch' not in self.keys_ignored_):
-            sorted_keys.append('epoch')
+        # make sure "epoch" comes first
+        if ("epoch" in keys) and ("epoch" not in self.keys_ignored_):
+            sorted_keys.append("epoch")
 
         # ignore keys like *_best or event_*
         for key in filter_log_keys(
                 sorted(keys), keys_ignored=self.keys_ignored_):
-            if key != 'dur':
+            if key != "dur":
                 sorted_keys.append(key)
 
         # add event_* keys
         for key in sorted(keys):
-            if key.startswith('event_') and (key not in self.keys_ignored_):
+            if key.startswith("event_") and (key not in self.keys_ignored_):
                 sorted_keys.append(key)
 
-        # make sure 'dur' comes last
-        if ('dur' in keys) and ('dur' not in self.keys_ignored_):
-            sorted_keys.append('dur')
+        # make sure "dur" comes last
+        if ("dur" in keys) and ("dur" not in self.keys_ignored_):
+            sorted_keys.append("dur")
 
         return sorted_keys
 
@@ -118,7 +133,6 @@ class RayTrainNeuralNet(NeuralNet):
 
     def initialize_trainer(self):
         self.trainer_ = Trainer("torch", num_workers=4, use_gpu=False)
-        self.trainer_.start()
 
     def _get_history_io(self, **values):
         return {
@@ -141,14 +155,15 @@ class RayTrainNeuralNet(NeuralNet):
                 if train.world_rank() == 0:
                     output = self._get_history_io()
                     est.save_params(
-                        f_params=output['f_params'],
-                        f_optimizer=output['f_optimizer'],
-                        f_criterion=output['f_criterion'],
-                        f_history=output['f_history'])
+                        f_params=output["f_params"],
+                        f_optimizer=output["f_optimizer"],
+                        f_criterion=output["f_criterion"],
+                        f_history=output["f_history"])
                     return {k: v.getvalue() for k, v in output.items()}
                 return {}
 
-            results = self.trainer_.run(train_func)
+            with ray_trainer_start_shutdown(self.trainer_):
+                results = self.trainer_.run(train_func)
             self.initialize(initialize_ray=False)
             params = results[0]
             self.module_ = params.pop("f_params")
@@ -174,12 +189,13 @@ class RayTrainNeuralNet(NeuralNet):
             output = self._get_history_io()
             self.save_params(
                 f_params=None,
-                f_optimizer=output['f_optimizer'],
-                f_criterion=output['f_criterion'],
-                f_history=output['f_history'])
+                f_optimizer=output["f_optimizer"],
+                f_criterion=output["f_criterion"],
+                f_history=output["f_history"])
             output.pop("f_params")
             output = {k: v.getvalue() for k, v in output.items()}
             output["f_params"] = self.module_
 
-            results = self.trainer_.run(train_func, output)
+            with ray_trainer_start_shutdown(self.trainer_):
+                results = self.trainer_.run(train_func, output)
             return results[0]["ret"]
