@@ -21,7 +21,7 @@ class ray_trainer_start_shutdown(AbstractContextManager):
     def __enter__(self):
         self.trainer.start(self.initialization_hook)
 
-    def __exit__(self, __exc_type, __exc_value, __traceback) -> bool | None:
+    def __exit__(self, __exc_type, __exc_value, __traceback) -> None:
         self.trainer.shutdown()
 
 
