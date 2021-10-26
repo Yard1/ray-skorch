@@ -35,7 +35,7 @@ class TabModel(BaseEstimator):
     epsilon: float = 1e-15
     momentum: float = 0.02
     lambda_sparse: float = 1e-3
-    seed: int = 0
+    random_state: int = 0
     clip_value: int = 1
     verbose: int = 1
     optimizer_fn: Any = torch.optim.Adam
@@ -50,13 +50,8 @@ class TabModel(BaseEstimator):
     n_indep_decoder: int = 1
 
     def __post_init__(self):
-        self.batch_size = 1024
-        self.virtual_batch_size = 128
-        torch.manual_seed(self.seed)
-        # Defining device
-        self.device = torch.device(define_device(self.device_name))
-        if self.verbose != 0:
-            print(f"Device used : {self.device}")
+        self._batch_size = 1024
+        self._virtual_batch_size = 128
 
     def __update__(self, **kwargs):
         """
@@ -152,22 +147,29 @@ class TabModel(BaseEstimator):
         """
         # update model name
 
-        self.max_epochs = max_epochs
-        self.patience = patience
-        self.batch_size = batch_size
-        self.virtual_batch_size = virtual_batch_size
-        self.num_workers = num_workers
-        self.drop_last = drop_last
-        self.input_dim = X_train.shape[1]
+        torch.manual_seed(self.random_state)
+
+        # Defining device
+        self.device_ = torch.device(define_device(self.device_name))
+        if self.verbose != 0:
+            print(f"Device used : {self.device_}")
+
+        self.max_epochs_ = max_epochs
+        self.patience_ = patience
+        self.batch_size_ = batch_size
+        self.virtual_batch_size_ = virtual_batch_size
+        self.num_workers_ = num_workers
+        self.drop_last_ = drop_last
+        self.input_dim_ = X_train.shape[1]
         # self._stop_training = False
-        self.pin_memory = pin_memory and (self.device.type != "cpu")
+        self.pin_memory_ = pin_memory and (self.device_.type != "cpu")
 
         eval_set = eval_set if eval_set else []
 
         if loss_fn is None:
-            self.loss_fn = self._default_loss
+            self.loss_fn_ = self._default_loss
         else:
-            self.loss_fn = loss_fn
+            self.loss_fn_ = loss_fn
 
         check_array(X_train)
 

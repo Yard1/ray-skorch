@@ -1,1 +1,1 @@
-from .tab_network import TabNetRegressor
+from .tabnet_approach import *

@@ -21,7 +21,6 @@ def _check_or_unzip_santander():
         print(str(archive), "does not exist!")
 
 
-
 def load_santander():
     import pandas as pd
     _check_or_unzip_santander()

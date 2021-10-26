@@ -2,3 +2,4 @@ ray[default]
 torch
 pytorch-tabnet
 pandas
+skorch

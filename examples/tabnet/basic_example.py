@@ -2,7 +2,7 @@ import argparse
 
 import numpy as np
 
-from ray_sklearn.tab_network import TabNetRegressor
+from ray_sklearn import TabNetRegressor
 
 
 def data_creator(size, a, b):
