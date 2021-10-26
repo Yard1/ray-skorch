@@ -13,7 +13,8 @@ from contextlib import AbstractContextManager
 
 
 class ray_trainer_start_shutdown(AbstractContextManager):
-    def __init__(self, trainer: Trainer,
+    def __init__(self,
+                 trainer: Trainer,
                  initialization_hook: Optional[Callable] = None) -> None:
         self.trainer = trainer
         self.initialization_hook = initialization_hook
@@ -95,8 +96,15 @@ class TrainReportCallback(Callback):
 class RayTrainNeuralNet(NeuralNet):
     @property
     def _default_callbacks(self):
-        return super()._default_callbacks + [("ray_train",
-                                              TrainReportCallback())]
+        try:
+            get_session()
+            if train.world_rank() == 0:
+                return super()._default_callbacks + [("ray_train",
+                                                      TrainReportCallback())]
+            return [("ray_train", TrainReportCallback())]
+        except ValueError:
+            return super()._default_callbacks + [("ray_train",
+                                                  TrainReportCallback())]
 
     def initialize_module(self):
         super().initialize_module()

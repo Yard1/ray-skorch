@@ -54,11 +54,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    X, y = data_creator(2000, 20)
+    X, y = data_creator(20000, 20)
 
     reg = RayTrainNeuralNet(
         RegressorModule,
-        max_epochs=10,
+        max_epochs=args.max_epochs,
         lr=0.1,
         criterion=nn.MSELoss,
         # Shuffle training data on each epoch
