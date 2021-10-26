@@ -14,7 +14,7 @@ from contextlib import AbstractContextManager
 
 class ray_trainer_start_shutdown(AbstractContextManager):
     def __init__(self, trainer: Trainer,
-                 initialization_hook: Optional[Callable]) -> None:
+                 initialization_hook: Optional[Callable] = None) -> None:
         self.trainer = trainer
         self.initialization_hook = initialization_hook
 
