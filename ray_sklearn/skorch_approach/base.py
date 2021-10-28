@@ -1,4 +1,5 @@
 from typing import Callable, Optional
+import numpy as np
 from ray.train.trainer import Trainer
 from ray import train
 from ray.train.session import get_session
@@ -213,7 +214,7 @@ class RayTrainNeuralNet(NeuralNet):
             est = clone(self)
 
             def train_func(config):
-                label = config["label"]
+                label = config.pop("label")
                 X_ray_dataset = train.get_dataset_shard().to_torch(
                     label_column=label)
                 est.fit(X_ray_dataset, None, epochs=epochs, **fit_params)
@@ -241,15 +242,17 @@ class RayTrainNeuralNet(NeuralNet):
         if _is_in_train_session():
             return super().predict_proba(X)
         else:
+            dataset = self.get_dataset(X, None)
             est = clone(self)
 
             def train_func(config):
+                label = config.pop("label")
                 config = self._get_history_io(**config)
                 est.initialize(initialize_ray=False).load_params(**config)
-                ret = est.predict_proba(X)
-                if train.world_rank() == 0:
-                    return {"ret": ret}
-                return {}
+                X_ray_dataset = train.get_dataset_shard().to_torch(
+                    label_column=label)
+                ret = est.predict_proba(X_ray_dataset)
+                return {"ret": ret}
 
             output = self._get_history_io()
             self.save_params(
@@ -260,7 +263,10 @@ class RayTrainNeuralNet(NeuralNet):
             output.pop("f_params")
             output = {k: v.getvalue() for k, v in output.items()}
             output["f_params"] = self.module_
+            output["label"] = dataset.y
 
             with ray_trainer_start_shutdown(self.trainer_):
-                results = self.trainer_.run(train_func, output)
-            return results[0]["ret"]
+                results = self.trainer_.run(
+                    train_func, output, dataset=dataset.X)
+            return np.vstack(
+                [result["ret"].ravel().reshape(-1, 1) for result in results])

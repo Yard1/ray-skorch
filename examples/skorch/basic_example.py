@@ -1,6 +1,7 @@
 import argparse
 
 import numpy as np
+import pandas as pd
 
 from skorch import NeuralNetRegressor
 from torch import nn
@@ -54,7 +55,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    X, y = data_creator(20000, 20)
+    X, y = data_creator(2000, 20)
+
+    X = pd.DataFrame(X)
+    y = pd.Series(y.ravel())
+    y.name = "target"
 
     #dataset = RayDataset(X, y)
 
