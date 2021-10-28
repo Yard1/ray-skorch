@@ -6,10 +6,20 @@ from skorch import NeuralNet
 from skorch.callbacks import Callback
 from skorch.callbacks.logging import filter_log_keys
 from torch.nn.parallel.distributed import DistributedDataParallel
+from torch.utils.data import DataLoader
 import torch
 from sklearn.base import clone
 import io
 from contextlib import AbstractContextManager
+from ray_sklearn.skorch_approach.dataset import WorkerDataset, RayDataset
+
+
+def _is_in_train_session() -> bool:
+    try:
+        get_session()
+        return True
+    except ValueError:
+        return False
 
 
 class ray_trainer_start_shutdown(AbstractContextManager):
@@ -94,6 +104,54 @@ class TrainReportCallback(Callback):
 
 
 class RayTrainNeuralNet(NeuralNet):
+    def __init__(self,
+                 module,
+                 criterion,
+                 optimizer=torch.optim.SGD,
+                 lr=0.01,
+                 max_epochs=10,
+                 batch_size=128,
+                 iterator_train=DataLoader,
+                 iterator_valid=DataLoader,
+                 dataset=RayDataset,
+                 worker_dataset=WorkerDataset,
+                 train_split=None,
+                 callbacks=None,
+                 predict_nonlinearity='auto',
+                 warm_start=False,
+                 verbose=1,
+                 device='cpu',
+                 **kwargs):
+        super().__init__(
+            module,
+            criterion,
+            optimizer=optimizer,
+            lr=lr,
+            max_epochs=max_epochs,
+            batch_size=batch_size,
+            iterator_train=iterator_train,
+            iterator_valid=iterator_valid,
+            dataset=dataset,
+            train_split=train_split,
+            callbacks=callbacks,
+            predict_nonlinearity=predict_nonlinearity,
+            warm_start=warm_start,
+            verbose=verbose,
+            device=device,
+            **kwargs)
+        self.worker_dataset = worker_dataset
+
+    def get_dataset(self, X, y=None):
+        original_dataset = None
+        if _is_in_train_session():
+            original_dataset = self.dataset
+            self.dataset = self.worker_dataset
+        ret = super().get_dataset(X, y=y)
+        if original_dataset is not None:
+            self.dataset = original_dataset
+
+        return ret
+
     @property
     def _default_callbacks(self):
         try:
@@ -108,28 +166,24 @@ class RayTrainNeuralNet(NeuralNet):
 
     def initialize_module(self):
         super().initialize_module()
-        try:
-            get_session()
+        if _is_in_train_session():
             self.module_ = DistributedDataParallel(
                 self.module_,
                 find_unused_parameters=True,
                 device_ids=[train.local_rank()]
                 if torch.cuda.is_available() else None)
-        except ValueError:
-            pass
 
     def initialize(self, initialize_ray=True):
         self.initialize_virtual_params()
         self.initialize_callbacks()
 
         if initialize_ray:
-            try:
-                get_session()
+            if _is_in_train_session():
                 self.initialize_criterion()
                 self.initialize_module()
                 self.initialize_optimizer()
                 self.initialize_history()
-            except ValueError:
+            else:
                 self.initialize_trainer()
         else:
             self.initialize_criterion()
@@ -152,15 +206,17 @@ class RayTrainNeuralNet(NeuralNet):
         }
 
     def fit_loop(self, X, y=None, epochs=None, **fit_params):
-        try:
-            get_session()
+        if _is_in_train_session():
             return super().fit_loop(X, y, epochs=epochs, **fit_params)
-        except ValueError:
-
+        else:
+            dataset = self.get_dataset(X, y)
             est = clone(self)
 
             def train_func(config):
-                est.fit(X, y, epochs=epochs, **fit_params)
+                label = config["label"]
+                X_ray_dataset = train.get_dataset_shard().to_torch(
+                    label_column=label)
+                est.fit(X_ray_dataset, None, epochs=epochs, **fit_params)
                 if train.world_rank() == 0:
                     output = self._get_history_io()
                     est.save_params(
@@ -172,7 +228,8 @@ class RayTrainNeuralNet(NeuralNet):
                 return {}
 
             with ray_trainer_start_shutdown(self.trainer_):
-                results = self.trainer_.run(train_func)
+                results = self.trainer_.run(
+                    train_func, config={"label": dataset.y}, dataset=dataset.X)
             self.initialize(initialize_ray=False)
             params = results[0]
             self.module_ = params.pop("f_params")
@@ -181,10 +238,9 @@ class RayTrainNeuralNet(NeuralNet):
             self.load_params(**params)
 
     def predict_proba(self, X):
-        try:
-            get_session()
+        if _is_in_train_session():
             return super().predict_proba(X)
-        except ValueError:
+        else:
             est = clone(self)
 
             def train_func(config):

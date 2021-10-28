@@ -10,7 +10,7 @@ from pytorch_tabnet.multiclass_utils import infer_output_dim
 from sklearn.datasets import make_regression
 
 from ray_sklearn.skorch_approach.base import RayTrainNeuralNet
-
+from ray_sklearn.skorch_approach.dataset import RayDataset
 
 def data_creator(rows, cols):
     X_regr, y_regr = make_regression(
@@ -56,13 +56,16 @@ if __name__ == "__main__":
 
     X, y = data_creator(20000, 20)
 
+    #dataset = RayDataset(X, y)
+
     reg = RayTrainNeuralNet(
         RegressorModule,
         max_epochs=args.max_epochs,
         lr=0.1,
         criterion=nn.MSELoss,
+        train_split=None,
         # Shuffle training data on each epoch
-        iterator_train__shuffle=True,
+        #iterator_train__shuffle=True,
     )
     reg.fit(X, y)
     print(reg.predict(X))
