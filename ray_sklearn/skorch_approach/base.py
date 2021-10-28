@@ -112,6 +112,7 @@ class RayTrainNeuralNet(NeuralNet):
             get_session()
             self.module_ = DistributedDataParallel(
                 self.module_,
+                find_unused_parameters=True,
                 device_ids=[train.local_rank()]
                 if torch.cuda.is_available() else None)
         except ValueError:
