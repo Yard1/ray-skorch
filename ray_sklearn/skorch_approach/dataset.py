@@ -35,7 +35,7 @@ class RayDataset(SkorchDataset):
         else:
             super().__init__(X, y=y, length=length)
             self.y = pd.DataFrame(self.y, columns=[LABEL_COLUMN])
-            self.X = pd.DataFrame(X)
+            self.X = pd.DataFrame(self.X)
             self.X = from_pandas(pd.concat((self.X, self.y), axis=1))
             self.__init__(self.X, y=LABEL_COLUMN, length=length)
 
