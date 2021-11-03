@@ -43,4 +43,4 @@ if __name__ == "__main__":
         # iterator_train__shuffle=True,
     )
     reg.fit(X, y)
-    print(reg.predict(X))
+    #print(reg.predict(X))

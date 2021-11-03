@@ -3,15 +3,12 @@ import argparse
 import numpy as np
 import pandas as pd
 
-from skorch import NeuralNetRegressor
 from torch import nn
 import torch.nn.functional as F
-from ray_sklearn.models.tabnet import TabNet
-from pytorch_tabnet.multiclass_utils import infer_output_dim
 from sklearn.datasets import make_regression
 
 from ray_sklearn.skorch_approach.base import RayTrainNeuralNet
-from ray_sklearn.skorch_approach.dataset import RayDataset
+
 
 def data_creator(rows, cols):
     X_regr, y_regr = make_regression(
@@ -61,16 +58,16 @@ if __name__ == "__main__":
     y = pd.Series(y.ravel())
     y.name = "target"
 
-    #dataset = RayDataset(X, y)
-
     reg = RayTrainNeuralNet(
         RegressorModule,
         max_epochs=args.max_epochs,
         lr=0.1,
         criterion=nn.MSELoss,
-        train_split=None,
+        #train_split=None,
         # Shuffle training data on each epoch
         #iterator_train__shuffle=True,
     )
     reg.fit(X, y)
-    print(reg.predict(X))
+    #print(reg.predict(X))
+
+    print("Done!")
