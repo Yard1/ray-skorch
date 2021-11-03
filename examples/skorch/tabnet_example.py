@@ -34,11 +34,12 @@ if __name__ == "__main__":
 
     reg = RayTrainNeuralNet(
         TabNet,
+        criterion=nn.MSELoss,
+        num_workers=4,
         module__input_dim=20,
         module__output_dim=1,
         max_epochs=args.max_epochs,
         lr=0.1,
-        criterion=nn.MSELoss,
         # Shuffle training data on each epoch
         # iterator_train__shuffle=True,
     )

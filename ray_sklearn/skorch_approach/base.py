@@ -1,7 +1,8 @@
-from typing import Callable, Optional
+from typing import Callable, Optional, Type
 from contextlib import AbstractContextManager
 import io
 import numpy as np
+import inspect
 
 from ray import train
 from ray.train.trainer import Trainer
@@ -262,11 +263,12 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
 
 
 class RayTrainNeuralNet(NeuralNet):
-    prefixes_ = NeuralNet.prefixes_ + ["worker_dataset"]
+    prefixes_ = NeuralNet.prefixes_ + ["worker_dataset", "trainer"]
 
     def __init__(self,
                  module,
                  criterion,
+                 num_workers: int,
                  optimizer=torch.optim.SGD,
                  lr=0.01,
                  max_epochs=10,
@@ -281,6 +283,7 @@ class RayTrainNeuralNet(NeuralNet):
                  warm_start=False,
                  verbose=1,
                  device='cpu',
+                 trainer: Type[Trainer] = Trainer,
                  **kwargs):
         super().__init__(
             module,
@@ -299,20 +302,16 @@ class RayTrainNeuralNet(NeuralNet):
             verbose=verbose,
             device=device,
             **kwargs)
+        self.trainer = trainer
         self.worker_dataset = worker_dataset
+        self.num_workers = num_workers
 
     def initialize(self, initialize_ray=True):
         self.initialize_virtual_params()
         self.initialize_callbacks()
 
         if initialize_ray:
-            if _is_in_train_session():
-                self.initialize_criterion()
-                self.initialize_module()
-                self.initialize_optimizer()
-                self.initialize_history()
-            else:
-                self.initialize_trainer()
+            self.initialize_trainer()
         else:
             self.initialize_criterion()
             self.initialize_module()
@@ -323,7 +322,32 @@ class RayTrainNeuralNet(NeuralNet):
         return self
 
     def initialize_trainer(self):
-        self.trainer_ = Trainer("torch", num_workers=4, use_gpu=False)
+        kwargs = self.get_params_for("trainer")
+        trainer = self.trainer
+        is_initialized = isinstance(trainer, Trainer)
+
+        if kwargs or not is_initialized:
+
+            kwargs["backend"] = "torch"
+            if "num_workers" not in kwargs:
+                kwargs["num_workers"] = self.num_workers
+            if "use_gpu" not in kwargs:
+                kwargs["use_gpu"] = self.device != "cpu"
+
+            if is_initialized:
+                trainer = type(trainer)
+
+            if (is_initialized or self.initialized_) and self.verbose:
+                msg = self._format_reinit_msg("trainer", kwargs)
+                print(msg)
+
+            trainer = trainer(**kwargs)
+
+        if not trainer._backend == "torch":
+            raise ValueError("Only torch backend is supported")
+
+        self.trainer_ = trainer
+        return self
 
     def _get_history_io(self, **values):
         return {
@@ -335,7 +359,13 @@ class RayTrainNeuralNet(NeuralNet):
 
     def _get_worker_estimator(self) -> _WorkerRayTrainNeuralNet:
         est = clone(self)
-        del est.__dict__["worker_dataset"]
+        worker_attributes = set(
+            inspect.signature(_WorkerRayTrainNeuralNet.__init__).parameters)
+        driver_attributes = set(
+            inspect.signature(self.__class__.__init__).parameters)
+        attributes_to_remove = driver_attributes.difference(worker_attributes)
+        for attr in attributes_to_remove:
+            del est.__dict__[attr]
         est.__class__ = _WorkerRayTrainNeuralNet
         est.set_params(dataset=self.worker_dataset)
         return est

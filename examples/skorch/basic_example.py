@@ -60,9 +60,10 @@ if __name__ == "__main__":
 
     reg = RayTrainNeuralNet(
         RegressorModule,
+        criterion=nn.MSELoss,
+        num_workers=4,
         max_epochs=args.max_epochs,
         lr=0.1,
-        criterion=nn.MSELoss,
         #train_split=None,
         # Shuffle training data on each epoch
         #iterator_train__shuffle=True,
