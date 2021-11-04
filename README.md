@@ -9,3 +9,10 @@
 
 ./examples/basic_example.py
 ```
+
+
+## Notes
+
+Before checking into the main repo, we should be sure to:
+
+1. Remove the vendored santander dataset
