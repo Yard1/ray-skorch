@@ -128,17 +128,30 @@ class FixedSplit:
 
 
 class PipelineIterator:
-    def __init__(self, dataset: RayPipelineDataset, batch_size) -> None:
+    def __init__(self,
+                 dataset: RayPipelineDataset,
+                 batch_size,
+                 feature_columns=None,
+                 label_column_dtype=None,
+                 feature_column_dtypes=None,
+                 prefetch_blocks=0,
+                 drop_last=False) -> None:
         self.dataset = dataset
-        self.iterator = dataset.X.iter_epochs()
         self.batch_size = batch_size
-        self.next_iter = None
+        self.feature_columns = feature_columns
+        self.label_column_dtype = label_column_dtype
+        self.feature_column_dtypes = feature_column_dtypes
+        self.prefetch_blocks = prefetch_blocks
+        self.drop_last = drop_last
+        self._next_iter = None
+        self._iterator = dataset.X.iter_epochs()
 
     def __iter__(self):
-        self.next_iter = iter(
-            next(self.iterator).to_torch(
-                label_column=self.dataset.y, batch_size=self.batch_size))
-        return self
-
-    def __next__(self):
-        return next(self.next_iter)
+        yield from next(self._iterator).to_torch(
+            label_column=self.dataset.y,
+            batch_size=self.batch_size,
+            feature_columns=self.feature_columns,
+            label_column_dtype=self.label_column_dtype,
+            feature_column_dtypes=self.feature_column_dtypes,
+            prefetch_blocks=self.prefetch_blocks,
+            drop_last=self.drop_last)

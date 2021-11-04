@@ -1,4 +1,4 @@
-from typing import Callable, Optional, Type
+from typing import Callable, Optional, Type, Union
 from contextlib import AbstractContextManager
 import io
 import numpy as np
@@ -185,7 +185,7 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
         else:
             self.iterator_valid_ = initalized_iterator
 
-        return iter(initalized_iterator)
+        return initalized_iterator
 
     def fit(self, X, y=None, X_val=None, y_val=None, **fit_params):
         if not self.warm_start or not self.initialized_:
@@ -283,7 +283,7 @@ class RayTrainNeuralNet(NeuralNet):
                  warm_start=False,
                  verbose=1,
                  device='cpu',
-                 trainer: Type[Trainer] = Trainer,
+                 trainer: Union[Type[Trainer], Trainer] = Trainer,
                  **kwargs):
         super().__init__(
             module,
