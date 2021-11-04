@@ -37,8 +37,10 @@ def _is_in_train_session() -> bool:
 def _is_dataset_or_ray_dataset(x) -> bool:
     return is_dataset(x) or isinstance(x, (Dataset, DatasetPipeline))
 
+
 def _is_using_gpu(device) -> bool:
     return device == "cuda" and torch.cuda.is_available()
+
 
 class ray_trainer_start_shutdown(AbstractContextManager):
     def __init__(self,
@@ -123,7 +125,10 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
     def initialize_callbacks(self):
         super().initialize_callbacks()
         if train.world_rank() != 0:
-            self.callbacks_ = []
+            self.callbacks_ = [
+                callback_tuple for callback_tuple in self.callbacks_
+                if getattr(callback_tuple[0], "_on_all_ranks", False)
+            ]
         report_callback = _TrainReportCallback()
         report_callback.initialize()
         self.callbacks_ += [("ray_train", report_callback)]
