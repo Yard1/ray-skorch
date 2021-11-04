@@ -7,6 +7,7 @@ import inspect
 from ray import train
 from ray.train.trainer import Trainer
 from ray.train.session import get_session
+import ray.data.impl.progress_bar
 from ray.data.dataset import Dataset
 from ray.data.dataset_pipeline import DatasetPipeline
 
@@ -36,6 +37,8 @@ def _is_in_train_session() -> bool:
 def _is_dataset_or_ray_dataset(x) -> bool:
     return is_dataset(x) or isinstance(x, (Dataset, DatasetPipeline))
 
+def _is_using_gpu(device) -> bool:
+    return device == "cuda" and torch.cuda.is_available()
 
 class ray_trainer_start_shutdown(AbstractContextManager):
     def __init__(self,
@@ -51,7 +54,7 @@ class ray_trainer_start_shutdown(AbstractContextManager):
         self.trainer.shutdown()
 
 
-class TrainReportCallback(Callback):
+class _TrainReportCallback(Callback):
     def __init__(
             self,
             keys_ignored=None,
@@ -119,22 +122,20 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
 
     def initialize_callbacks(self):
         super().initialize_callbacks()
-        if _is_in_train_session():
-            if train.world_rank() != 0:
-                self.callbacks_ = []
-            report_callback = TrainReportCallback()
-            report_callback.initialize()
-            self.callbacks_ += [("ray_train", report_callback)]
+        if train.world_rank() != 0:
+            self.callbacks_ = []
+        report_callback = _TrainReportCallback()
+        report_callback.initialize()
+        self.callbacks_ += [("ray_train", report_callback)]
         return self
 
     def initialize_module(self):
         super().initialize_module()
-        if _is_in_train_session():
-            self.module_ = DistributedDataParallel(
-                self.module_,
-                find_unused_parameters=True,
-                device_ids=[train.local_rank()]
-                if torch.cuda.is_available() else None)
+        self.module_ = DistributedDataParallel(
+            self.module_,
+            find_unused_parameters=True,
+            device_ids=[train.local_rank()]
+            if _is_using_gpu(self.device) else None)
         return self
 
     def initialize(self):
@@ -415,19 +416,28 @@ class RayTrainNeuralNet(NeuralNet):
         assert dataset_train.y == dataset_valid.y  # TODO improve
 
         est = self._get_worker_estimator()
+        show_progress_bars = ray.data.impl.progress_bar._enabled
 
         def train_func(config):
             label = config.pop("label")
             dataset_class = config.pop("dataset_class")
+            ray.data.impl.progress_bar.set_progress_bars(show_progress_bars)
 
             X_train = dataset_class(
                 train.get_dataset_shard("dataset_train"), label)
             X_val = dataset_class(
                 train.get_dataset_shard("dataset_valid"), label)
 
+            using_cuda = False
+            if _is_using_gpu(est.device):
+                using_cuda = True
+                est.set_params(device=f"cuda:{train.local_rank()}")
+
             est.fit(X_train, None, epochs=epochs, X_val=X_val, **fit_params)
 
             if train.world_rank() == 0:
+                if using_cuda:
+                    est.set_params(device="cuda")
                 output = self._get_history_io()
                 est.save_params(
                     f_params=output["f_params"],
