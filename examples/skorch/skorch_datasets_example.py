@@ -42,4 +42,6 @@ if __name__ == "__main__":
     reg.fit(dataset, "target")
     #print(reg.predict(X))
 
+    print(reg.history)
+    print(reg.worker_histories_)
     print("Done!")

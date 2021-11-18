@@ -16,6 +16,7 @@ def _pandas_get_name_or_column(x: Union[pd.Series, pd.DataFrame]) -> str:
     return x.columns[0]
 
 
+# TODO support lists and dicts
 class RayDataset(SkorchDataset):
     def __init__(
             self,
