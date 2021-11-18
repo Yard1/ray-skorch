@@ -4,11 +4,16 @@ import numpy as np
 import pandas as pd
 
 from torch import nn
+from pprint import pprint
 
+import ray.data
 from ray_sklearn.skorch_approach.base import RayTrainNeuralNet
 from ray_sklearn.skorch_approach.dataset import RayDataset
 
 from basic_example import data_creator, RegressorModule
+
+
+ray.data.set_progress_bars(False)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -42,6 +47,7 @@ if __name__ == "__main__":
     reg.fit(dataset, "target")
     #print(reg.predict(X))
 
-    print(reg.history)
-    print(reg.worker_histories_)
+    #pprint(reg.history)
+    #pprint(reg.worker_histories_)
+    #pprint(reg.ray_train_history_)
     print("Done!")

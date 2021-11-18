@@ -7,12 +7,14 @@ import inspect
 from ray import train
 from ray.train.trainer import Trainer
 from ray.train.session import get_session
+import ray.data
 import ray.data.impl.progress_bar
 from ray.data.dataset import Dataset
 from ray.data.dataset_pipeline import DatasetPipeline
 
 from skorch import NeuralNet
 from skorch.callbacks import Callback
+from skorch.callbacks import PassthroughScoring
 from skorch.callbacks.base import _issue_warning_if_on_batch_override
 from skorch.callbacks.logging import filter_log_keys
 from skorch.dataset import Dataset as SkorchDataset, unpack_data
@@ -24,8 +26,9 @@ from torch.nn.parallel.distributed import DistributedDataParallel
 
 from sklearn.base import clone
 
-from ray_sklearn.skorch_approach.callbacks.skorch import (TrainReportCallback,
-                                                          PerformanceLogger)
+from ray_sklearn.skorch_approach.callbacks.train import PrintCallback
+from ray_sklearn.skorch_approach.callbacks.skorch import (
+    TrainReportCallback, PerformanceLogger, EpochTimerS)
 from ray_sklearn.skorch_approach.dataset import (FixedSplit, PipelineIterator,
                                                  dataset_factory)
 from ray_sklearn.skorch_approach.utils import (
@@ -97,13 +100,25 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
             if func:
                 getattr(cb, method_name)(self, **cb_kwargs)
 
+    @property
+    def _default_callbacks(self):
+        return [
+            ('epoch_timer', EpochTimerS()),
+            ('train_loss',
+             PassthroughScoring(
+                 name='train_loss',
+                 on_train=True,
+             )),
+            ('valid_loss', PassthroughScoring(name='valid_loss', )),
+        ]
+
     def initialize_callbacks(self):
         super().initialize_callbacks()
-        if train.world_rank() != 0:
-            self.callbacks_ = [
-                callback_tuple for callback_tuple in self.callbacks_
-                if getattr(callback_tuple[0], "_on_all_ranks", False)
-            ]
+        #if train.world_rank() != 0:
+        #    self.callbacks_ = [
+        #        callback_tuple for callback_tuple in self.callbacks_
+        #        if getattr(callback_tuple[0], "_on_all_ranks", False)
+        #    ]
         report_callback = TrainReportCallback()
         report_callback.initialize()
         performance_callback = PerformanceLogger()
@@ -449,7 +464,7 @@ class RayTrainNeuralNet(NeuralNet):
         def train_func(config):
             label = config.pop("label")
             dataset_class = config.pop("dataset_class")
-            ray.data.impl.progress_bar.set_progress_bars(show_progress_bars)
+            ray.data.set_progress_bars(show_progress_bars)
 
             X_train = dataset_class(
                 train.get_dataset_shard("dataset_train"), label)
@@ -472,6 +487,8 @@ class RayTrainNeuralNet(NeuralNet):
             est.save_params(**output)
             return {k: v.getvalue() for k, v in output.items()}
 
+        print_callback = PrintCallback()
+
         with ray_trainer_start_shutdown(self.trainer_):
             results = self.trainer_.run(
                 train_func,
@@ -482,7 +499,8 @@ class RayTrainNeuralNet(NeuralNet):
                 dataset={
                     "dataset_train": dataset_train.X,
                     "dataset_valid": dataset_valid.X
-                })
+                },
+                callbacks=[print_callback])
 
         self.initialize(initialize_ray=False)
         params = results[0]
@@ -496,6 +514,7 @@ class RayTrainNeuralNet(NeuralNet):
                                     result)["f_history"])
             for result in results[1:]
         ]
+        self.ray_train_history_ = print_callback._history
         return self
 
     def predict_proba(self, X):

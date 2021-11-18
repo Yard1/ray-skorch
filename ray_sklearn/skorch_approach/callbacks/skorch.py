@@ -2,7 +2,7 @@ import time
 
 from ray import train
 
-from skorch.callbacks import Callback
+from skorch.callbacks import Callback, EpochTimer
 from skorch.callbacks.logging import filter_log_keys
 
 from ray_sklearn.skorch_approach.utils import (
@@ -35,6 +35,16 @@ class RayTrainCallback(Callback):
         """Called at the end of host to device copy of y."""
 
 
+class EpochTimerS(EpochTimer):
+    """Measures the duration of each epoch and writes it to the
+    history with the name ``dur_s``.
+
+    """
+
+    def on_epoch_end(self, net, **kwargs):
+        net.history.record('dur_s', time.time() - self.epoch_start_time_)
+
+
 class PerformanceLogger(RayTrainCallback):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -65,9 +75,10 @@ class PerformanceLogger(RayTrainCallback):
 
     def on_batch_end(self, net, batch=None, training=None, **kwargs):
         net.history.record_batch(
-            'to_device_dur', self.X_to_device_time_ + self.y_to_device_time_)
-        net.history.record_batch('forward_pass_dur', self.forward_pass_time_)
-        net.history.record_batch('backward_pass_dur', self.backward_pass_time_)
+            'to_device_dur_s', self.X_to_device_time_ + self.y_to_device_time_)
+        net.history.record_batch('forward_pass_dur_s', self.forward_pass_time_)
+        net.history.record_batch('backward_pass_dur_s',
+                                 self.backward_pass_time_)
 
 
 class TrainReportCallback(RayTrainCallback):
@@ -86,7 +97,7 @@ class TrainReportCallback(RayTrainCallback):
         if isinstance(keys_ignored, str):
             keys_ignored = [keys_ignored]
         self.keys_ignored_ = set(keys_ignored or [])
-        self.keys_ignored_.add("batches")
+        #self.keys_ignored_.add("batches")
         return self
 
     def _sorted_keys(self, keys):
@@ -95,8 +106,8 @@ class TrainReportCallback(RayTrainCallback):
         The keys that are in ``self.ignored_keys`` or that end on
         '_best' are dropped. Among the remaining keys:
           * 'epoch' is put first;
-          * 'dur' is put last;
-          * keys that start with 'event_' are put just before 'dur';
+          * 'dur_s' is put last;
+          * keys that start with 'event_' are put just before 'dur_s';
           * all remaining keys are sorted alphabetically.
         """
         sorted_keys = []
@@ -108,7 +119,7 @@ class TrainReportCallback(RayTrainCallback):
         # ignore keys like *_best or event_*
         for key in filter_log_keys(
                 sorted(keys), keys_ignored=self.keys_ignored_):
-            if key != "dur":
+            if key != "dur_s":
                 sorted_keys.append(key)
 
         # add event_* keys
@@ -117,8 +128,8 @@ class TrainReportCallback(RayTrainCallback):
                 sorted_keys.append(key)
 
         # make sure "dur" comes last
-        if ("dur" in keys) and ("dur" not in self.keys_ignored_):
-            sorted_keys.append("dur")
+        if ("dur_s" in keys) and ("dur_s" not in self.keys_ignored_):
+            sorted_keys.append("dur_s")
 
         return sorted_keys
 
@@ -127,7 +138,7 @@ class TrainReportCallback(RayTrainCallback):
             return
         history = net.history
         hist = history[-1]
-        train.report(history=hist, **{
+        train.report(**{
             k: v
             for k, v in hist.items() if k in self._sorted_keys(hist.keys())
         })
