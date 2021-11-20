@@ -1,0 +1,38 @@
+# An unique identifier for the head node and workers of this cluster.
+cluster_name: ray-sklearn-benchmark
+
+max_workers: 20
+
+provider:
+    type: aws
+    region: us-west-2
+
+auth:
+    ssh_user: ubuntu
+    ssh_private_key: ~/.ssh/matt-test.pem
+
+available_node_types:
+    2-gpu-node:
+        min_workers: 0
+        max_workers: 20
+        node_config:
+            KeyName: matt-test
+            InstanceType: g3.8xlarge
+            IamInstanceProfile:
+                Arn: arn:aws:iam::959243851260:instance-profile/ray-autoscaler-v1
+        resources: {}
+
+head_node_type: 2-gpu-node
+
+
+file_mounts: {
+    "~/ray-sklearn": "/Users/matt/workspace/ray-sklearn",
+}
+
+setup_commands:
+    - pip install llvmlite --ignore-installed
+    - pip install awscli
+    - pip install dask-ml
+    - mkdir -p ~/data && cd ~/data && aws s3 sync s3://ray-ci-taxi . && rm -rf taxi.parquet && unzip -o new-york-city-taxi-fare-prediction.zip
+    - cd ~/ray-sklearn && pip install -e . && pip install -r examples/benchmark/requirements-baseline.txt
+    - ray install-nightly

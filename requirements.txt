@@ -1,5 +1,5 @@
 ray[default]
-torch
+torch 
 pytorch-tabnet
 pandas
 skorch==0.10.0

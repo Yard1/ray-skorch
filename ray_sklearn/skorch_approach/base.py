@@ -5,6 +5,7 @@ import numpy as np
 import inspect
 
 from ray import train
+from ray.train.torch import TorchConfig
 from ray.train.trainer import Trainer
 from ray.train.session import get_session
 import ray.data.impl.progress_bar
@@ -39,6 +40,7 @@ def _is_dataset_or_ray_dataset(x) -> bool:
 
 
 def _is_using_gpu(device) -> bool:
+    print(device)
     return device == "cuda" and torch.cuda.is_available()
 
 
@@ -135,6 +137,7 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
         return self
 
     def initialize_module(self):
+        print(self.device)
         super().initialize_module()
         self.module_ = DistributedDataParallel(
             self.module_,
@@ -349,7 +352,7 @@ class RayTrainNeuralNet(NeuralNet):
 
             trainer = trainer(**kwargs)
 
-        if not trainer._backend == "torch":
+        if not isinstance(trainer._backend_config, TorchConfig):
             raise ValueError("Only torch backend is supported")
 
         self.trainer_ = trainer
@@ -365,6 +368,7 @@ class RayTrainNeuralNet(NeuralNet):
 
     def _get_worker_estimator(self) -> _WorkerRayTrainNeuralNet:
         est = clone(self)
+        print(est.device)
         worker_attributes = set(
             inspect.signature(_WorkerRayTrainNeuralNet.__init__).parameters)
         driver_attributes = set(
