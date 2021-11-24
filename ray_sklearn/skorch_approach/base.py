@@ -26,9 +26,9 @@ from torch.nn.parallel.distributed import DistributedDataParallel
 
 from sklearn.base import clone
 
-from ray_sklearn.skorch_approach.callbacks.train import PrintCallback
+from ray_sklearn.skorch_approach.callbacks.train import PrintCallback, TBXProfilerCallback
 from ray_sklearn.skorch_approach.callbacks.skorch import (
-    TrainReportCallback, PerformanceLogger, EpochTimerS)
+    TrainReportCallback, PerformanceLogger, EpochTimerS, PytorchProfilerLogger)
 from ray_sklearn.skorch_approach.dataset import (FixedSplit, PipelineIterator,
                                                  dataset_factory)
 from ray_sklearn.skorch_approach.utils import (
@@ -123,7 +123,10 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
         report_callback.initialize()
         performance_callback = PerformanceLogger()
         performance_callback.initialize()
+        profiler_callback = PytorchProfilerLogger()
+        profiler_callback.initialize()
         self.callbacks_ += [("ray_performance_logger", performance_callback),
+                            ("ray_pytorch_profiler_logger", profiler_callback),
                             ("ray_train", report_callback)]
         return self
 
@@ -397,7 +400,6 @@ class RayTrainNeuralNet(NeuralNet):
             "f_params": io.BytesIO(values.get("f_params", None)),
             "f_optimizer": io.BytesIO(values.get("f_optimizer", None)),
             "f_criterion": io.BytesIO(values.get("f_criterion", None)),
-            "f_history": io.StringIO(values.get("f_history", None)),
         }
         return {k: v for k, v in ret.items() if k in (only_keys or ret.keys())}
 
@@ -482,12 +484,15 @@ class RayTrainNeuralNet(NeuralNet):
                 if using_cuda:
                     est.set_params(device="cuda")
                 output = self._get_params_io()
+                est.save_params(**output)
+                output = {k: v.getvalue() for k, v in output.items()}
             else:
-                output = self._get_params_io(only_keys=["f_history"])
-            est.save_params(**output)
-            return {k: v.getvalue() for k, v in output.items()}
+                output = {}
+            output["history"] = est.history_
+            return output
 
         print_callback = PrintCallback()
+        tbx_callback = TBXProfilerCallback()
 
         with ray_trainer_start_shutdown(self.trainer_):
             results = self.trainer_.run(
@@ -500,19 +505,17 @@ class RayTrainNeuralNet(NeuralNet):
                     "dataset_train": dataset_train.X,
                     "dataset_valid": dataset_valid.X
                 },
-                callbacks=[print_callback])
+                callbacks=[print_callback, tbx_callback])
 
         self.initialize(initialize_ray=False)
         params = results[0]
+        self.history_ = params.pop("history")
         self.module_ = params.pop("f_params")
         params = self._get_params_io(**params)
         params.pop("f_params")
         self.load_params(**params)
-        self.worker_histories_ = [self.history] + [
-            History.from_file(
-                self._get_params_io(only_keys=["f_history"], **
-                                    result)["f_history"])
-            for result in results[1:]
+        self.worker_histories_ = [self.history_] + [
+            result["history"] for result in results[1:]
         ]
         self.ray_train_history_ = print_callback._history
         return self
