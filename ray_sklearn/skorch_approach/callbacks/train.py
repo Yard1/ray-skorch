@@ -32,7 +32,7 @@ DEFAULT_KEYS_TO_NOT_AGGREGATE = {
     "valid_batch_size", PROFILER_KEY
 }
 
-DEFAULT_KEYS_TO_NOT_PRINT = {PROFILER_KEY}
+DEFAULT_KEYS_TO_NOT_PRINT = {PROFILER_KEY, "batches"}
 
 
 class TBXProfilerCallback(TrainingSingleFileLoggingCallback):
@@ -72,7 +72,8 @@ class PrintCallback(TrainingCallback):
             self,
             workers_to_log: Union[int, str, List[Union[int,
                                                        str]]] = "aggregate",
-            keys_to_not_print: Set[str] = DEFAULT_KEYS_TO_NOT_AGGREGATE,
+            record_only: bool = False,
+            keys_to_not_print: Set[str] = DEFAULT_KEYS_TO_NOT_PRINT,
             keys_to_not_aggregate: Set[str] = DEFAULT_KEYS_TO_NOT_AGGREGATE,
             aggregate_method: str = "nested",
             aggregate_funcs: Dict[str, Callable[[List[
@@ -84,6 +85,7 @@ class PrintCallback(TrainingCallback):
         self._aggregate_method = aggregate_method
         self._aggregate_funcs = aggregate_funcs
         self._log_path = None
+        self._record_only = record_only
         self._history = []
 
     def _validate_workers_to_log(self, workers_to_log) -> List[int]:
@@ -154,4 +156,5 @@ class PrintCallback(TrainingCallback):
             for worker_rank, worker_results in results_dict.items()
             if worker_rank in self._workers_to_log
         }
-        pprint(print_dict)
+        if not self._record_only:
+            pprint(print_dict)

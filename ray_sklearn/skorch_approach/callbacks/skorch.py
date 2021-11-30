@@ -101,10 +101,15 @@ class PytorchProfilerLogger(RayTrainCallback):
                 raise RuntimeError("Can't create directory: " + dir_name)
         filename = f"worker_{train.world_rank()}_{self.epoch_}.pt.trace.json"
         path = os.path.join(dir_name, filename)
-        p.export_chrome_trace(path)
-        with open(path) as f:
-            data = f.read()
-        self.profiler_traces_.append((filename, data, p.events()))
+        # TODO consider compression
+        try:
+            p.export_chrome_trace(path)
+            with open(path) as f:
+                data = f.read()
+            self.profiler_traces_.append((filename, data, p.events()))
+        except RuntimeError:
+            # trace is already saved
+            pass
 
     def on_train_begin(self, net, X=None, y=None, **kwargs):
         self.has_gpu_ = is_using_gpu(net.device)
@@ -112,16 +117,20 @@ class PytorchProfilerLogger(RayTrainCallback):
             "activities": [ProfilerActivity.CPU] + [ProfilerActivity.CUDA]
             if self.has_gpu_ else [],
             "with_stack": False,
-            "schedule": schedule(wait=0, warmup=0, active=net.max_epochs),
+            "schedule": schedule(wait=0, warmup=1, active=4),
             "on_trace_ready": self._trace_handler
         }
         self.epoch_ = 0
         self.record_functions_ = {}
         self.profiler_ = profile(**self.profiler_args_)
         self.profiler_.__enter__()
+        self.profiler_is_initialized_ = True
 
     def on_train_end(self, net, X=None, y=None, **kwargs):
-        self.profiler_.__exit__(None, None, None)
+        if self.profiler_is_initialized_:
+            self.profiler_.__exit__(None, None, None)
+            self._trace_handler(self.profiler_)
+            self.profiler_is_initialized_ = False
 
     def on_forward_pass_begin(self, net, X=None, **kwargs):
         record_name = "forward_pass"

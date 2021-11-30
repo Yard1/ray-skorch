@@ -1,10 +1,11 @@
-from typing import Callable, Optional, Type, Union
+from typing import Callable, Dict, List, Optional, Type, Union
 from contextlib import AbstractContextManager
 import io
 import numpy as np
 import inspect
 
 from ray import train
+from ray.train.callbacks.callback import TrainingCallback
 from ray.train.trainer import Trainer
 from ray.train.session import get_session
 import ray.data
@@ -51,6 +52,43 @@ class ray_trainer_start_shutdown(AbstractContextManager):
 
 class _WorkerRayTrainNeuralNet(NeuralNet):
     """Internal use only. Estimator used inside each Train worker."""
+
+    def __init__(self,
+                 module,
+                 criterion,
+                 optimizer=torch.optim.SGD,
+                 lr=0.01,
+                 max_epochs=10,
+                 batch_size=128,
+                 iterator_train=PipelineIterator,
+                 iterator_valid=PipelineIterator,
+                 dataset=dataset_factory,
+                 train_split=FixedSplit(0.2),
+                 callbacks=None,
+                 predict_nonlinearity='auto',
+                 warm_start=False,
+                 verbose=1,
+                 device='cpu',
+                 profile: bool = False,
+                 **kwargs):
+        super().__init__(
+            module,
+            criterion,
+            optimizer=optimizer,
+            lr=lr,
+            max_epochs=max_epochs,
+            batch_size=batch_size,
+            iterator_train=iterator_train,
+            iterator_valid=iterator_valid,
+            dataset=dataset,
+            train_split=train_split,
+            callbacks=callbacks,
+            predict_nonlinearity=predict_nonlinearity,
+            warm_start=warm_start,
+            verbose=verbose,
+            device=device,
+            **kwargs)
+        self.profile = profile
 
     def on_forward_pass_begin(self, net, X=None, **kwargs):
         """Called at the beginning of forward pass."""
@@ -121,13 +159,16 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
         #    ]
         report_callback = TrainReportCallback()
         report_callback.initialize()
-        performance_callback = PerformanceLogger()
-        performance_callback.initialize()
-        profiler_callback = PytorchProfilerLogger()
-        profiler_callback.initialize()
-        self.callbacks_ += [("ray_performance_logger", performance_callback),
-                            ("ray_pytorch_profiler_logger", profiler_callback),
-                            ("ray_train", report_callback)]
+        if self.profile:
+            performance_callback = PerformanceLogger()
+            performance_callback.initialize()
+            profiler_callback = PytorchProfilerLogger()
+            profiler_callback.initialize()
+            self.callbacks_ += [("ray_performance_logger",
+                                 performance_callback),
+                                ("ray_pytorch_profiler_logger",
+                                 profiler_callback)]
+        self.callbacks_ += [("ray_train", report_callback)]
         return self
 
     def initialize_module(self):
@@ -319,7 +360,12 @@ class RayTrainNeuralNet(NeuralNet):
                  verbose=1,
                  device='cpu',
                  trainer: Union[Type[Trainer], Trainer] = Trainer,
+                 profile: bool = False,
                  **kwargs):
+        self.trainer = trainer
+        self.worker_dataset = worker_dataset
+        self.num_workers = num_workers
+        self.profile = profile
         super().__init__(
             module,
             criterion,
@@ -337,9 +383,6 @@ class RayTrainNeuralNet(NeuralNet):
             verbose=verbose,
             device=device,
             **kwargs)
-        self.trainer = trainer
-        self.worker_dataset = worker_dataset
-        self.num_workers = num_workers
 
     def initialize(self, initialize_ray=True):
         self._initialize_virtual_params()
@@ -353,7 +396,7 @@ class RayTrainNeuralNet(NeuralNet):
             self._initialize_optimizer()
             self._initialize_history()
 
-        self._check_kwargs(self._kwargs)
+            self._check_kwargs(self._kwargs)
 
         self.initialized_ = True
         return self
@@ -415,6 +458,15 @@ class RayTrainNeuralNet(NeuralNet):
         est.__class__ = _WorkerRayTrainNeuralNet
         est.set_params(dataset=self.worker_dataset)
         return est
+
+    def _get_ray_train_callbacks(self) -> Dict[str, TrainingCallback]:
+        callbacks = {}
+        print_callback = PrintCallback(record_only=not self.profile)
+        callbacks["print_callback"] = print_callback
+        if self.profile:
+            tbx_callback = TBXProfilerCallback()
+            callbacks["tbx_callback"] = tbx_callback
+        return callbacks
 
     def fit(self, X, y=None, X_val=None, y_val=None, **fit_params):
         if not self.warm_start or not self.initialized_:
@@ -491,9 +543,7 @@ class RayTrainNeuralNet(NeuralNet):
             output["history"] = est.history_
             return output
 
-        print_callback = PrintCallback()
-        tbx_callback = TBXProfilerCallback()
-
+        callbacks = self._get_ray_train_callbacks()
         with ray_trainer_start_shutdown(self.trainer_):
             results = self.trainer_.run(
                 train_func,
@@ -505,7 +555,7 @@ class RayTrainNeuralNet(NeuralNet):
                     "dataset_train": dataset_train.X,
                     "dataset_valid": dataset_valid.X
                 },
-                callbacks=[print_callback, tbx_callback])
+                callbacks=list(callbacks.values()))
 
         self.initialize(initialize_ray=False)
         params = results[0]
@@ -517,7 +567,7 @@ class RayTrainNeuralNet(NeuralNet):
         self.worker_histories_ = [self.history_] + [
             result["history"] for result in results[1:]
         ]
-        self.ray_train_history_ = print_callback._history
+        self.ray_train_history_ = callbacks["print_callback"]._history
         return self
 
     def predict_proba(self, X):
