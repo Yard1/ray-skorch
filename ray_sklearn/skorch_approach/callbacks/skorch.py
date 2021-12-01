@@ -218,6 +218,7 @@ class TrainCheckpoint(Checkpoint, RayTrainCallback):
                  f_history: bool = True,
                  f_pickle: bool = False,
                  event_name: str = "event_cp",
+                 save_checkpoints: bool = True,
                  load_checkpoint: bool = True,
                  sink=noop,
                  **kwargs):
@@ -230,6 +231,7 @@ class TrainCheckpoint(Checkpoint, RayTrainCallback):
         self.event_name = event_name
         self.sink = sink
         self.load_checkpoint = load_checkpoint
+        self.save_checkpoints = save_checkpoints
         self._check_kwargs(kwargs)
         vars(self).update(**kwargs)
 
@@ -264,6 +266,11 @@ class TrainCheckpoint(Checkpoint, RayTrainCallback):
 
     def on_train_end(self, net, **kwargs):
         return
+
+    def on_epoch_end(self, net, **kwargs):
+        if not self.save_checkpoints:
+            return
+        return super().on_epoch_end(net, **kwargs)
 
     def save_model(self, net):
         """Save the model.

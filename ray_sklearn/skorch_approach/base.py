@@ -169,10 +169,10 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
                                  performance_callback),
                                 ("ray_pytorch_profiler_logger",
                                  profiler_callback)]
-        if self.save_checkpoints:
-            checkpoint_callback = TrainCheckpoint()
-            checkpoint_callback.initialize()
-            self.callbacks_ += [("ray_checkpoint", checkpoint_callback)]
+        checkpoint_callback = TrainCheckpoint(
+            save_checkpoints=self.save_checkpoints)
+        checkpoint_callback.initialize()
+        self.callbacks_ += [("ray_checkpoint", checkpoint_callback)]
 
         report_callback = TrainReportCallback()
         report_callback.initialize()
