@@ -173,11 +173,8 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
 
     def initialize_module(self):
         super().initialize_module()
-        self.module_ = DistributedDataParallel(
-            self.module_,
-            find_unused_parameters=True,
-            device_ids=[train.local_rank()]
-            if is_using_gpu(self.device) else None)
+        self.module_ = train.torch.prepare_model(
+            self.module_, ddp_kwargs=dict(find_unused_parameters=True))
         return self
 
     def initialize(self):
@@ -432,7 +429,7 @@ class RayTrainNeuralNet(NeuralNet):
 
             trainer = trainer(**kwargs)
 
-        if not trainer._backend == "torch":
+        if not isinstance(trainer._backend_config, train.torch.TorchConfig):
             raise ValueError("Only torch backend is supported")
 
         self.trainer_ = trainer
@@ -461,7 +458,7 @@ class RayTrainNeuralNet(NeuralNet):
 
     def _get_ray_train_callbacks(self) -> Dict[str, TrainingCallback]:
         callbacks = {}
-        print_callback = PrintCallback(record_only=not self.profile)
+        print_callback = PrintCallback()
         callbacks["print_callback"] = print_callback
         if self.profile:
             tbx_callback = TBXProfilerCallback()
@@ -525,16 +522,13 @@ class RayTrainNeuralNet(NeuralNet):
             X_val = dataset_class(
                 train.get_dataset_shard("dataset_valid"), label)
 
-            using_cuda = False
-            if is_using_gpu(est.device):
-                using_cuda = True
-                est.set_params(device=f"cuda:{train.local_rank()}")
-
+            original_device = est.device
+            est.set_params(device=train.torch.get_device())
+            print(est.device)
             est.fit(X_train, None, epochs=epochs, X_val=X_val, **fit_params)
 
             if train.world_rank() == 0:
-                if using_cuda:
-                    est.set_params(device="cuda")
+                est.set_params(device=original_device)
                 output = self._get_params_io()
                 est.save_params(**output)
                 output = {k: v.getvalue() for k, v in output.items()}

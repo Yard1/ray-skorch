@@ -108,7 +108,7 @@ setup_commands:
     - mkdir -p ~/data && cd ~/data && aws s3 sync s3://ray-ci-taxi . && rm -rf taxi.parquet && unzip -o new-york-city-taxi-fare-prediction.zip
     - cd /ray_sklearn/ && pip install -e .
     # - pip install -U https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp36-cp36m-manylinux2014_x86_64.whl
-    # - pip install -U "ray[default] @ https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp37-cp37m-manylinux2014_x86_64.whl"
+    - pip install -U "ray[default] @ https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp37-cp37m-manylinux2014_x86_64.whl"
 
 # Custom commands that will be run on the head node after common setup.
 head_setup_commands:
