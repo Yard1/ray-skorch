@@ -71,6 +71,7 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
                  verbose=1,
                  device='cpu',
                  profile: bool = False,
+                 save_checkpoints: bool = False,
                  **kwargs):
         super().__init__(
             module,
@@ -90,6 +91,7 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
             device=device,
             **kwargs)
         self.profile = profile
+        self.save_checkpoints = save_checkpoints
 
     def on_forward_pass_begin(self, net, X=None, **kwargs):
         """Called at the beginning of forward pass."""
@@ -158,10 +160,6 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
         #        callback_tuple for callback_tuple in self.callbacks_
         #        if getattr(callback_tuple[0], "_on_all_ranks", False)
         #    ]
-        checkpoint_callback = TrainCheckpoint()
-        checkpoint_callback.initialize()
-        report_callback = TrainReportCallback()
-        report_callback.initialize()
         if self.profile:
             performance_callback = PerformanceLogger()
             performance_callback.initialize()
@@ -171,8 +169,14 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
                                  performance_callback),
                                 ("ray_pytorch_profiler_logger",
                                  profiler_callback)]
-        self.callbacks_ += [("ray_checkpoint", checkpoint_callback),
-                            ("ray_train", report_callback)]
+        if self.save_checkpoints:
+            checkpoint_callback = TrainCheckpoint()
+            checkpoint_callback.initialize()
+            self.callbacks_ += [("ray_checkpoint", checkpoint_callback)]
+
+        report_callback = TrainReportCallback()
+        report_callback.initialize()
+        self.callbacks_ += [("ray_train", report_callback)]
         return self
 
     def initialize_module(self):
@@ -362,11 +366,13 @@ class RayTrainNeuralNet(NeuralNet):
                  device='cpu',
                  trainer: Union[Type[Trainer], Trainer] = Trainer,
                  profile: bool = False,
+                 save_checkpoints: bool = False,
                  **kwargs):
         self.trainer = trainer
         self.worker_dataset = worker_dataset
         self.num_workers = num_workers
         self.profile = profile
+        self.save_checkpoints = save_checkpoints
         super().__init__(
             module,
             criterion,
