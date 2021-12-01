@@ -1,17 +1,21 @@
 import time
 import os
-import json
+import io
+import pickle
 from queue import Queue
+from typing import Callable, Optional, Union
+from skorch.callbacks.training import Checkpoint
 
-from torch.profiler import profile, record_function, ProfilerActivity, schedule, tensorboard_trace_handler
+from torch.profiler import profile, record_function, ProfilerActivity, schedule
 
 from ray import train
 
 from skorch.callbacks import Callback, EpochTimer
 from skorch.callbacks.logging import filter_log_keys
+from skorch.utils import _check_f_arguments, noop
 
-from ray_sklearn.skorch_approach.utils import (
-    is_in_train_session, is_dataset_or_ray_dataset, is_using_gpu)
+from ray_sklearn.skorch_approach.utils import (is_in_train_session,
+                                               is_using_gpu)
 from ray_sklearn.skorch_approach.callbacks.constants import PROFILER_KEY
 
 
@@ -199,6 +203,142 @@ class PytorchProfilerLogger(RayTrainCallback):
         net.history.record(
             PROFILER_KEY, self.profiler_traces_
             if self.profiler_traces_ else [])
+
+
+def default_monitor(net):
+    return True
+
+
+class TrainCheckpoint(Checkpoint, RayTrainCallback):
+    def __init__(self,
+                 monitor: Union[str, Callable] = default_monitor,
+                 f_params: bool = True,
+                 f_optimizer: bool = True,
+                 f_criterion: bool = True,
+                 f_history: bool = True,
+                 f_pickle: bool = False,
+                 event_name: str = "event_cp",
+                 load_checkpoint: bool = True,
+                 sink=noop,
+                 **kwargs):
+        self.monitor = monitor
+        self.f_params = f_params
+        self.f_optimizer = f_optimizer
+        self.f_criterion = f_criterion
+        self.f_history = f_history
+        self.f_pickle = f_pickle
+        self.event_name = event_name
+        self.sink = sink
+        self.load_checkpoint = load_checkpoint
+        self._check_kwargs(kwargs)
+        vars(self).update(**kwargs)
+
+    def initialize(self):
+        return self
+
+    def on_train_begin(self, net, X=None, y=None, **kwargs):
+        if not self.load_checkpoint:
+            return
+        checkpoint = train.load_checkpoint()
+        if not checkpoint:
+            return
+        self._sink(f"Checkpoint found, loading...", net.verbose)
+
+        try:
+            epoch = checkpoint.pop("epoch")
+            keys = checkpoint.pop("_keys")
+        except KeyError:
+            raise ValueError(
+                "Invalid checkpoint. Ensure the checkpoint was created with "
+                "train-sklearn. Expected 'epoch' and '_keys' keys, got "
+                f"{list(checkpoint.keys())}.")
+        checkpoint_params = {
+            k: self._get_io(k, v)
+            for k, v in checkpoint.items() if k in keys
+        }
+        net.load_params(**checkpoint_params)
+        self._sink(
+            f"Loaded checkpoint {list(checkpoint_params.keys())} "
+            f"with epoch {epoch}", net.verbose)
+        return
+
+    def on_train_end(self, net, **kwargs):
+        return
+
+    def save_model(self, net):
+        """Save the model.
+
+        This function saves some or all of the following:
+
+          - model parameters;
+          - optimizer state;
+          - criterion state;
+          - training history;
+          - custom modules;
+          - entire model object.
+
+        """
+        kwargs_module, kwargs_other = _check_f_arguments(
+            self.__class__.__name__, **self._f_kwargs())
+
+        params = {}
+
+        for key, val in kwargs_module.items():
+            if val is None:
+                continue
+
+            f = self._get_io(f"f_{key}")
+            key = key[:-1]  # remove trailing '_'
+            params[f"f_{key}"] = self._save_params(f, net, f"f_{key}",
+                                                   f"{key} state")
+
+        f_history = kwargs_other.get('f_history')
+        if f_history:
+            f = self.f_history_
+            params["f_history"] = self._save_params(f, net, "f_history",
+                                                    "history")
+
+        f_pickle = kwargs_other.get('f_pickle')
+        if f_pickle:
+            f_pickle = self._get_io("f_pickle")
+            with open(f_pickle, 'wb') as f:
+                pickle.dump(net, f)
+            params["f_pickle"] = f_pickle
+
+        epoch = net.history[-1]["epoch"]
+        keys_to_load = tuple(key for key in params.keys() if key != "f_pickle")
+        train.save_checkpoint(
+            _keys=keys_to_load,
+            epoch=epoch,
+            **{k: v.getvalue()
+               for k, v in params.items() if v})
+
+    def _save_params(self, f, net, f_name, log_name):
+        try:
+            net.save_params(**{f_name: f})
+            return f
+        except Exception as e:  # pylint: disable=broad-except
+            self._sink(
+                "Unable to save {} to {}, {}: {}".format(
+                    log_name, f,
+                    type(e).__name__, e), net.verbose)
+
+    def _validate_filenames(self):
+        return
+
+    @property
+    def f_history_(self):
+        # This is a property and not in initialize to allow ``NeuralNet``
+        # to call ``load_params`` without needing the checkpoint to
+        # by initialized.
+        if self.f_history is None:
+            return None
+        return self._get_io("f_history")
+
+    def _get_io(self, f_key, value=None):
+        if f_key == "f_history":
+            return io.StringIO(value)
+        return io.BytesIO(value)
 
 
 class TrainReportCallback(RayTrainCallback):

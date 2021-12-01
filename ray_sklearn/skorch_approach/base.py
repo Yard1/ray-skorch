@@ -29,7 +29,8 @@ from sklearn.base import clone
 
 from ray_sklearn.skorch_approach.callbacks.train import PrintCallback, TBXProfilerCallback
 from ray_sklearn.skorch_approach.callbacks.skorch import (
-    TrainReportCallback, PerformanceLogger, EpochTimerS, PytorchProfilerLogger)
+    TrainCheckpoint, TrainReportCallback, PerformanceLogger, EpochTimerS,
+    PytorchProfilerLogger)
 from ray_sklearn.skorch_approach.dataset import (FixedSplit, PipelineIterator,
                                                  dataset_factory)
 from ray_sklearn.skorch_approach.utils import (
@@ -157,6 +158,8 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
         #        callback_tuple for callback_tuple in self.callbacks_
         #        if getattr(callback_tuple[0], "_on_all_ranks", False)
         #    ]
+        checkpoint_callback = TrainCheckpoint()
+        checkpoint_callback.initialize()
         report_callback = TrainReportCallback()
         report_callback.initialize()
         if self.profile:
@@ -168,7 +171,8 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
                                  performance_callback),
                                 ("ray_pytorch_profiler_logger",
                                  profiler_callback)]
-        self.callbacks_ += [("ray_train", report_callback)]
+        self.callbacks_ += [("ray_checkpoint", checkpoint_callback),
+                            ("ray_train", report_callback)]
         return self
 
     def initialize_module(self):
@@ -465,11 +469,23 @@ class RayTrainNeuralNet(NeuralNet):
             callbacks["tbx_callback"] = tbx_callback
         return callbacks
 
-    def fit(self, X, y=None, X_val=None, y_val=None, **fit_params):
+    def fit(self,
+            X,
+            y=None,
+            X_val=None,
+            y_val=None,
+            checkpoint=None,
+            **fit_params):
         if not self.warm_start or not self.initialized_:
             self.initialize()
 
-        self.partial_fit(X, y, X_val=X_val, y_val=y_val, **fit_params)
+        self.partial_fit(
+            X,
+            y,
+            X_val=X_val,
+            y_val=y_val,
+            checkpoint=checkpoint,
+            **fit_params)
         return self
 
     def partial_fit(self,
@@ -478,13 +494,20 @@ class RayTrainNeuralNet(NeuralNet):
                     classes=None,
                     X_val=None,
                     y_val=None,
+                    checkpoint=None,
                     **fit_params):
         if not self.initialized_:
             self.initialize()
 
         self.notify('on_train_begin', X=X, y=y)
         try:
-            self.fit_loop(X, y, X_val=X_val, y_val=y_val, **fit_params)
+            self.fit_loop(
+                X,
+                y,
+                X_val=X_val,
+                y_val=y_val,
+                checkpoint=checkpoint,
+                **fit_params)
         except KeyboardInterrupt:
             pass
         self.notify('on_train_end', X=X, y=y)
@@ -496,6 +519,7 @@ class RayTrainNeuralNet(NeuralNet):
                  epochs=None,
                  X_val=None,
                  y_val=None,
+                 checkpoint=None,
                  **fit_params):
         if X_val is None:
             dataset_train, dataset_valid = self.get_split_datasets(
@@ -549,7 +573,8 @@ class RayTrainNeuralNet(NeuralNet):
                     "dataset_train": dataset_train.X,
                     "dataset_valid": dataset_valid.X
                 },
-                callbacks=list(callbacks.values()))
+                callbacks=list(callbacks.values()),
+                checkpoint=checkpoint)
 
         self.initialize(initialize_ray=False)
         params = results[0]
