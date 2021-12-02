@@ -13,6 +13,7 @@ from torch import nn
 
 from ray_sklearn.models.tabnet import TabNet
 from ray_sklearn.skorch_approach.base import RayTrainNeuralNet
+from ray_sklearn.skorch_approach.dataset import FixedSplit
 
 ray.data.set_progress_bars(False)
 
@@ -54,6 +55,17 @@ if __name__ == "__main__":
              "batch-size/num-workers records at a time. Defaults to 1024.",
     )
     parser.add_argument(
+        "--worker-batch-size",
+        type=int,
+        required=False,
+        help="The per-worker batch size. If set this will take precedence the batch-size argument.",
+    )
+    parser.add_argument(
+        "--shuffle",
+        action="store_true",
+        help="If enabled, training data will be globally shuffled.",
+    )
+    parser.add_argument(
         "--lr",
         type=float,
         default=0.02,
@@ -67,6 +79,8 @@ if __name__ == "__main__":
     num_epochs = args.num_epochs
     smoke_test = args.smoke_test
     batch_size = args.batch_size
+    worker_batch_size = args.worker_batch_size
+    shuffle = args.shuffle
     lr = args.lr
 
     target = "fare_amount"
@@ -81,9 +95,9 @@ if __name__ == "__main__":
     dask_df = scaler.fit_transform(
         dd.read_csv(os.path.expanduser("~/data/train.csv"))[
             features + [target]].dropna().astype("float32"))
-    dataset = ray.data.from_dask(dask_df)
     if smoke_test:
-        dataset = dataset.limit(2000).repartition(128)
+        dask_df = dask_df.sample(frac=0.1)
+    dataset = ray.data.from_dask(dask_df)
 
     print(dataset)
     print("dataset loaded")
@@ -92,6 +106,17 @@ if __name__ == "__main__":
 
     class _GradientNormClipping(GradientNormClipping):
         _on_all_ranks = True
+
+
+    if worker_batch_size:
+        print(f"Using worker batch size: {worker_batch_size}")
+        train_worker_batch_size = worker_batch_size
+    else:
+        train_worker_batch_size = batch_size / num_workers
+        print(f"Using global batch size: {batch_size}. "
+              f"For {num_workers} workers the per worker batch size is {train_worker_batch_size}.")
+
+
 
     train_start = time.time()
 
@@ -104,7 +129,8 @@ if __name__ == "__main__":
         module__output_dim=1,
         max_epochs=num_epochs,
         lr=lr,
-        batch_size=batch_size / num_workers,
+        batch_size=train_worker_batch_size,
+        train_split=FixedSplit(0.2, shuffle),
         verbose=5,
         # required for GPU
         callbacks=[_GradientNormClipping(1.0)],

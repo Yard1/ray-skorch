@@ -55,15 +55,21 @@ if __name__ == "__main__":
              "batch-size/num-workers records at a time. Defaults to 1024.",
     )
     parser.add_argument(
-        "--lr",
-        type=float,
-        default=0.02,
-        help="The learning rate. Defaults to 0.02",
+        "--worker-batch-size",
+        type=int,
+        required=False,
+        help="The per-worker batch size. If set this will take precedence the batch-size argument.",
     )
     parser.add_argument(
         "--shuffle",
         action="store_true",
         help="If enabled, training data will be globally shuffled.",
+    )
+    parser.add_argument(
+        "--lr",
+        type=float,
+        default=0.02,
+        help="The learning rate. Defaults to 0.02",
     )
 
     parser.add_argument(
@@ -79,6 +85,7 @@ if __name__ == "__main__":
     num_epochs = args.num_epochs
     smoke_test = args.smoke_test
     batch_size = args.batch_size
+    worker_batch_size = args.worker_batch_size
     shuffle = args.shuffle
     lr = args.lr
     debug = args.debug
@@ -95,9 +102,9 @@ if __name__ == "__main__":
     dask_df = scaler.fit_transform(
         dd.read_csv(os.path.expanduser("~/data/train.csv"))[
             features + [target]].dropna().astype("float32"))
-    dataset = ray.data.from_dask(dask_df)
     if smoke_test:
-        dataset = dataset.limit(2000).repartition(128)
+        dask_df = dask_df.sample(frac=0.1)
+    dataset = ray.data.from_dask(dask_df)
 
     print(dataset)
     print("dataset loaded")
@@ -118,6 +125,15 @@ if __name__ == "__main__":
         "train_dataset_pipeline": train_dataset_pipeline,
         "validation_dataset_pipeline": validation_dataset_pipeline
     }
+
+
+    if worker_batch_size:
+        print(f"Using worker batch size: {worker_batch_size}")
+        train_worker_batch_size = worker_batch_size
+    else:
+        train_worker_batch_size = batch_size / num_workers
+        print(f"Using global batch size: {batch_size}. "
+              f"For {num_workers} workers the per worker batch size is {train_worker_batch_size}.")
 
 
     def train_func(config):
@@ -142,9 +158,9 @@ if __name__ == "__main__":
             train_dataset = next(train_dataset_iterator)
             validation_dataset = next(validation_dataset_iterator)
             train_torch_dataset = train_dataset.to_torch(
-                label_column=target, batch_size=batch_size / num_workers)
+                label_column=target, batch_size=train_worker_batch_size)
             validation_torch_dataset = validation_dataset.to_torch(
-                label_column=target, batch_size=batch_size / num_workers)
+                label_column=target, batch_size=train_worker_batch_size)
 
             last_time = time.time()
 
@@ -189,6 +205,7 @@ if __name__ == "__main__":
                     num_rows += count
             loss = total_loss / num_rows  # TODO: should this be num batches or num rows?
             result = {"mean square error": loss}
+            print(f"Validation epoch: [{i}], mean square error:[{loss}]")
             results.append(result)
 
         return results

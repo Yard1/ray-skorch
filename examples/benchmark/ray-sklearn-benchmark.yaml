@@ -6,23 +6,28 @@ max_workers: 20
 provider:
     type: aws
     region: us-west-2
+    availability_zone: us-west-2a,us-west-2b,us-west-2c
 
 auth:
     ssh_user: ubuntu
     ssh_private_key: ~/.ssh/matt-test.pem
 
 available_node_types:
-    2-gpu-node:
-        min_workers: 0
+    1-gpu-node:
+        min_workers: 15
         max_workers: 20
         node_config:
             KeyName: matt-test
-            InstanceType: g3.8xlarge
+            InstanceType: g4dn.xlarge
             IamInstanceProfile:
                 Arn: arn:aws:iam::959243851260:instance-profile/ray-autoscaler-v1
+            BlockDeviceMappings:
+                -   DeviceName: /dev/sda1
+                    Ebs:
+                        VolumeSize: 200
         resources: {}
 
-head_node_type: 2-gpu-node
+head_node_type: 1-gpu-node
 
 
 file_mounts: {

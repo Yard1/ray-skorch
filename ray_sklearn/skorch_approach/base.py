@@ -137,13 +137,9 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
         return self
 
     def initialize_module(self):
-        print(self.device)
         super().initialize_module()
-        self.module_ = DistributedDataParallel(
-            self.module_,
-            find_unused_parameters=True,
-            device_ids=[train.local_rank()]
-            if _is_using_gpu(self.device) else None)
+        self.module_ = train.torch.prepare_model(
+            self.module_, ddp_kwargs=dict(find_unused_parameters=True))
         return self
 
     def initialize(self):
@@ -437,16 +433,13 @@ class RayTrainNeuralNet(NeuralNet):
             X_val = dataset_class(
                 train.get_dataset_shard("dataset_valid"), label)
 
-            using_cuda = False
-            if _is_using_gpu(est.device):
-                using_cuda = True
-                est.set_params(device=f"cuda:{train.local_rank()}")
+            original_device = est.device
+            est.set_params(device=train.torch.get_device())
 
             est.fit(X_train, None, epochs=epochs, X_val=X_val, **fit_params)
 
             if train.world_rank() == 0:
-                if using_cuda:
-                    est.set_params(device="cuda")
+                est.set_params(device=original_device)
                 output = self._get_history_io()
                 est.save_params(
                     f_params=output["f_params"],
