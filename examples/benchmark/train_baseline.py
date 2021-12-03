@@ -211,7 +211,7 @@ if __name__ == "__main__":
         criterion = nn.MSELoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", patience=5)
 
         device = train.torch.get_device()
 
