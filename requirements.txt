@@ -2,4 +2,4 @@ ray[default]
 torch
 pytorch-tabnet
 pandas
-skorch==0.10.0
+skorch==0.11.0

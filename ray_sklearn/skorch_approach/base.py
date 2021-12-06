@@ -313,19 +313,30 @@ class RayTrainNeuralNet(NeuralNet):
         self.num_workers = num_workers
 
     def initialize(self, initialize_ray=True):
-        self.initialize_virtual_params()
-        self.initialize_callbacks()
+        self._initialize_virtual_params()
+        self._initialize_callbacks()
 
         if initialize_ray:
-            self.initialize_trainer()
+            self._initialize_trainer()
         else:
-            self.initialize_criterion()
-            self.initialize_module()
-            self.initialize_optimizer()
-            self.initialize_history()
+            self._initialize_module()
+            self._initialize_criterion()
+            self._initialize_optimizer()
+            self._initialize_history()
+
+        self._check_kwargs(self._kwargs)
 
         self.initialized_ = True
         return self
+
+    def _initialize_trainer(self):
+        # this init context is for consistency and not being used at the moment
+        with self._current_init_context('trainer'):
+            if self.callbacks == "disable":
+                self.callbacks_ = []
+                return self
+            self.initialize_trainer()
+            return self
 
     def initialize_trainer(self):
         kwargs = self.get_params_for("trainer")
@@ -473,6 +484,7 @@ class RayTrainNeuralNet(NeuralNet):
         return self
 
     def predict_proba(self, X):
+        raise NotImplementedError
         dataset = self.get_dataset(X, None)
         est = clone(self)
 
