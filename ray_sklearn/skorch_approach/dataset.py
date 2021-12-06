@@ -291,7 +291,8 @@ class PipelineIterator:
                     use_multi_input = False
 
                 if use_multi_input:
-                    use_prefix = self.skorch_dataset.X_multiple_input_columns and feature_columns
+                    use_prefix = (self.skorch_dataset.X_multiple_input_columns
+                                  and feature_columns)
                     features_tensor = type(feature_columns_not_none)()
                     for k, v in iterator:
                         # Add prefix only if it's not already there
