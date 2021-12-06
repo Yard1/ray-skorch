@@ -54,6 +54,7 @@ class RayDataset(SkorchDataset):
         else:
             super().__init__(X, y=y, length=length)
             # TODO ensure LABEL_COLUMN is not in X
+            # TODO zip datasets instead of dataframes?
             if y is not None:
                 if not is_pandas_ndframe(self.y):
                     self.y = pd.DataFrame(self.y, columns=[LABEL_COLUMN])
