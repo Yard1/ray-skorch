@@ -53,6 +53,7 @@ class RayDataset(SkorchDataset):
             self._init_dataset(X, y)
         else:
             super().__init__(X, y=y, length=length)
+            # TODO ensure LABEL_COLUMN is not in X
             if y is not None:
                 if not is_pandas_ndframe(self.y):
                     self.y = pd.DataFrame(self.y, columns=[LABEL_COLUMN])
