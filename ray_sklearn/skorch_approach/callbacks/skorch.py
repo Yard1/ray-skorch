@@ -3,7 +3,7 @@ import os
 import io
 import pickle
 from queue import Queue
-from typing import Callable, Optional, Union
+from typing import Any, Callable, Dict, Iterable, Optional, Union, TYPE_CHECKING
 from skorch.callbacks.training import Checkpoint
 
 from torch.profiler import profile, record_function, ProfilerActivity, schedule
@@ -18,8 +18,15 @@ from ray_sklearn.skorch_approach.utils import (is_in_train_session,
                                                is_using_gpu)
 from ray_sklearn.skorch_approach.callbacks.constants import PROFILER_KEY
 
+if TYPE_CHECKING:
+    from ray_sklearn.skorch_approach.base import _WorkerRayTrainNeuralNet
+
 
 class RayTrainCallback(Callback):
+    """Abstract extension of the skorch ``Callback`` class.
+
+    Adds several new notify points."""
+
     def on_forward_pass_begin(self, net, X=None, **kwargs):
         """Called at the beginning of forward pass."""
 
@@ -56,6 +63,16 @@ class EpochTimerS(EpochTimer):
 
 
 class PerformanceLogger(RayTrainCallback):
+    """Logs times taken for several operations.
+
+    Operations logged:
+        * Batch
+        * Forward pass
+        * Backward pass
+        * X to device
+        * y to device
+    """
+
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
@@ -92,7 +109,26 @@ class PerformanceLogger(RayTrainCallback):
 
 
 class PytorchProfilerLogger(RayTrainCallback):
-    def __init__(self, profiler_args=None, **kwargs) -> None:
+    """Saves the profiler state to worker history so that it can be retrieved
+    by Ray Train during ``train.report()`` (through ``TrainReportCallback``).
+
+    Saves and reports the trace at training end.
+
+    Operations logged:
+        * Batch
+        * Forward pass
+        * Backward pass
+        * X to device
+        * y to device
+
+    Args:
+        profiler_args (Optional[Dict[str, Any]]): kwargs passed to
+        ``torch.profiler.profile()`
+    """
+
+    def __init__(self,
+                 profiler_args: Optional[Dict[str, Any]] = None,
+                 **kwargs) -> None:
         self.profiler_args = profiler_args
         super().__init__(**kwargs)
 
@@ -117,13 +153,14 @@ class PytorchProfilerLogger(RayTrainCallback):
 
     def on_train_begin(self, net, X=None, y=None, **kwargs):
         self.has_gpu_ = is_using_gpu(net.device)
-        self.profiler_args_ = self.profiler_args or {
+        profiler_args = self.profiler_args or {}
+        self.profiler_args_ =  {**{
             "activities": [ProfilerActivity.CPU] + [ProfilerActivity.CUDA]
             if self.has_gpu_ else [],
             "with_stack": False,
-            "schedule": schedule(wait=0, warmup=1, active=4),
+            # "schedule": schedule(wait=0, warmup=1, active=4),
             "on_trace_ready": self._trace_handler
-        }
+        }, **profiler_args}
         self.epoch_ = 0
         self.record_functions_ = {}
         self.profiler_ = profile(**self.profiler_args_)
@@ -210,8 +247,47 @@ def default_monitor(net):
 
 
 class TrainCheckpoint(Checkpoint, RayTrainCallback):
+    """Save and load Ray Train checkpoints.
+
+    By default, the checkpoint is saved every epoch. The behavior can
+    be modified by setting the ``monitor`` argument.
+
+    Args:
+        monitor (Union[str, Callable[["_WorkerRayTrainNeuralNet"], bool]]):
+            If callable, an epoch will be saved whenever it returns True.
+            If string, an epoch will be saved if the metric with that name
+            improves.
+        f_params (bool): Whether to save the model parameters in the
+            checkpoint. Defaults to True.
+        f_optimizer (bool): Whether to save the optimizer state in the
+            checkpoint. Defaults to True.
+        f_criterion (bool): Whether to save the criterion state in the
+            checkpoint. Defaults to True.
+        f_history (bool): Whether to save the head worker history in the
+            checkpoint. Defaults to True.
+        f_pickle (bool): Whether to save the entire ``NeuralNet`` as a
+            pickle in the checkpoint. This is usually not necessary,
+            as all the necessary information is saved with other items,
+            but may be useful for debugging. Defaults to False.
+        event_name (str):
+            Name of event to be placed in history when checkpoint is
+            triggered. Pass ``None`` to disable placing events in history.
+        save_checkpoints (bool):
+            Whether to save checkpoints at all. Defaults to True.
+        load_checkpoint (bool):
+            Whether to load a checkpoint if provided. Defaults to True.
+        sink (callable):
+            The target that the information about created checkpoints is
+            sent to. This can be a logger or ``print`` function (to send to
+            stdout). By default the output is discarded.
+        **kwargs:
+            If you've created a custom module, e.g. ``net.mymodule_``, you
+            can save that as well by passing ``f_mymodule=True``.
+    """
+
     def __init__(self,
-                 monitor: Union[str, Callable] = default_monitor,
+                 monitor: Union[str, Callable[["_WorkerRayTrainNeuralNet"],
+                                              bool]] = default_monitor,
                  f_params: bool = True,
                  f_optimizer: bool = True,
                  f_criterion: bool = True,
@@ -220,7 +296,7 @@ class TrainCheckpoint(Checkpoint, RayTrainCallback):
                  event_name: str = "event_cp",
                  save_checkpoints: bool = True,
                  load_checkpoint: bool = True,
-                 sink=noop,
+                 sink: Callable = noop,
                  **kwargs):
         self.monitor = monitor
         self.f_params = f_params
@@ -349,9 +425,16 @@ class TrainCheckpoint(Checkpoint, RayTrainCallback):
 
 
 class TrainReportCallback(RayTrainCallback):
+    """Report the last history entry from a worker to Ray Train.
+
+    Args:
+        keys_ignored (Optional[Union[str, Iterable]]):
+            Keys in a history entry to ignore during reporting.
+    """
+
     def __init__(
             self,
-            keys_ignored=None,
+            keys_ignored: Optional[Union[str, Iterable]] = None,
     ):
         self.keys_ignored = keys_ignored
 
@@ -403,9 +486,10 @@ class TrainReportCallback(RayTrainCallback):
     def on_epoch_end(self, net, **kwargs):
         if not is_in_train_session():
             return
-        history = net.history
-        hist = history[-1]
-        train.report(**{
-            k: v
-            for k, v in hist.items() if k in self._sorted_keys(hist.keys())
-        })
+        history = net.history[-1]
+        train.report(
+            **{
+                k: v
+                for k, v in history.items()
+                if k in self._sorted_keys(history.keys())
+            })
