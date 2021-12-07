@@ -23,7 +23,6 @@ from skorch.history import History
 from skorch.utils import is_dataset, to_tensor
 
 import torch
-from torch.nn.parallel.distributed import DistributedDataParallel
 
 from sklearn.base import clone
 
@@ -34,10 +33,42 @@ from ray_sklearn.skorch_approach.callbacks.skorch import (
 from ray_sklearn.skorch_approach.dataset import (FixedSplit, PipelineIterator,
                                                  dataset_factory)
 from ray_sklearn.skorch_approach.utils import (
-    is_in_train_session, is_dataset_or_ray_dataset, is_using_gpu)
+    is_in_train_session, is_dataset_or_ray_dataset, insert_before_substring)
+
+_docstring_neural_net_ray_args = """    num_workers : int
+      Number of Ray Train workers to use.
+
+"""
+
+_docstring_neural_net_ray_worker_dataset = """    worker_dataset : torch Dataset (default=skorch.dataset.Dataset)
+      Same as ``dataset``, but used internally inside workers. Should use torch Tensors.
+
+"""
+
+_docstring_neural_net_ray_trainer = """    trainer : ray.train.Trainer (class or instance) (default=ray.train.Trainer)
+      The Ray Train Trainer to use. If a class is passed, it will be instantiated internally.
+
+"""
+
+_docstring_neural_net_ray_kwargs = """    profile : bool (default=False)
+      Whether to enable PyTorch Profiler and callbacks necessary
+      for reporting.
+
+    save_checkpoints : bool (default=True)
+      Whether to enable or disable saving checkpoints (through
+      a callback).
+
+"""
 
 
 class ray_trainer_start_shutdown(AbstractContextManager):
+    """Context manager to start and shutdown a ``Trainer``.
+
+    Args:
+        initialization_hook (Optional[Callable]): The function to call on
+            each worker when it is instantiated.
+    """
+
     def __init__(self,
                  trainer: Trainer,
                  initialization_hook: Optional[Callable] = None) -> None:
@@ -45,15 +76,15 @@ class ray_trainer_start_shutdown(AbstractContextManager):
         self.initialization_hook = initialization_hook
 
     def __enter__(self):
+        """Starts a ``Trainer``."""
         self.trainer.start(self.initialization_hook)
 
     def __exit__(self, __exc_type, __exc_value, __traceback) -> None:
+        """Shutdowns the started ``Trainer``."""
         self.trainer.shutdown()
 
 
 class _WorkerRayTrainNeuralNet(NeuralNet):
-    """Internal use only. Estimator used inside each Train worker."""
-
     def __init__(self,
                  module,
                  criterion,
@@ -343,6 +374,14 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
         return self.criterion_(y_pred, y_true)
 
 
+_WorkerRayTrainNeuralNet.__doc__ = NeuralNet.__doc__.replace(
+    "NeuralNet base class.",
+    "Internal use only. NeuralNet used inside each Ray Train worker.")
+_WorkerRayTrainNeuralNet.__doc__ = insert_before_substring(
+    _WorkerRayTrainNeuralNet.__doc__, _docstring_neural_net_ray_kwargs,
+    "    Attributes")
+
+
 class RayTrainNeuralNet(NeuralNet):
     prefixes_ = NeuralNet.prefixes_ + ["worker_dataset", "trainer"]
 
@@ -592,7 +631,10 @@ class RayTrainNeuralNet(NeuralNet):
         self.worker_histories_ = [self.history_] + [
             result["history"] for result in results[1:]
         ]
-        self.ray_train_history_ = callbacks["print_callback"]._history
+        if "print_callback" in callbacks:
+            self.ray_train_history_ = callbacks["print_callback"]._history
+        else:
+            self.ray_train_history_ = None
         return self
 
     def predict_proba(self, X):
@@ -624,3 +666,30 @@ class RayTrainNeuralNet(NeuralNet):
             results = self.trainer_.run(train_func, output, dataset=dataset.X)
         return np.vstack(
             [result["ret"].ravel().reshape(-1, 1) for result in results])
+
+
+RayTrainNeuralNet.__doc__ = NeuralNet.__doc__.replace(
+    "NeuralNet base class.", "Distributed Skorch NeuralNet with Ray Train."
+).replace(
+    "train_split : None or callable (default=skorch.dataset.ValidSplit(5))",
+    ("train_split : None or callable "
+     "(default=ray_sklearn.dataset.FixedSplit(0.2))")
+).replace(
+    """    By default an :class:`.EpochTimer`, :class:`.BatchScoring` (for
+    both training and validation datasets), and :class:`.PrintLog`
+    callbacks are installed for the user's convenience.""",
+    """    By default several logging and reporting callbacks for both Skorch
+    and Ray Train are added to provide necessary functionality and
+    a basic output.""")
+RayTrainNeuralNet.__doc__ = insert_before_substring(
+    RayTrainNeuralNet.__doc__, _docstring_neural_net_ray_worker_dataset,
+    "    train_split : None or callable")
+RayTrainNeuralNet.__doc__ = insert_before_substring(
+    RayTrainNeuralNet.__doc__, _docstring_neural_net_ray_args,
+    "    optimizer : torch optim")
+RayTrainNeuralNet.__doc__ = insert_before_substring(
+    RayTrainNeuralNet.__doc__, _docstring_neural_net_ray_trainer,
+    "    Attributes")
+RayTrainNeuralNet.__doc__ = insert_before_substring(
+    RayTrainNeuralNet.__doc__, _docstring_neural_net_ray_kwargs,
+    "    Attributes")
