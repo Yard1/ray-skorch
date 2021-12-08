@@ -6,6 +6,7 @@ import pandas as pd
 from torch import nn
 from pprint import pprint
 
+import ray
 import ray.data
 from ray_sklearn.skorch_approach.base import RayTrainNeuralNet
 from ray_sklearn.skorch_approach.dataset import RayDataset
@@ -18,13 +19,27 @@ ray.data.set_progress_bars(False)
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--max-epochs",
+        "--address",
+        required=False,
+        default=None,
+        type=str,
+        help="the address to use for Ray")
+    parser.add_argument(
+        "--num-workers",
+        "-n",
         type=int,
-        default=5,
-        help="Sets the number of training epochs. Defaults to 5.",
-    )
+        default=2,
+        help="Sets number of workers for training.")
+    parser.add_argument(
+        "--use-gpu",
+        action="store_true",
+        default=False,
+        help="Enables GPU training")
+    parser.add_argument(
+        "--epochs", type=int, default=3, help="Number of epochs to train for.")
 
     args = parser.parse_args()
+    ray.init(address=args.address)
 
     X, y = data_creator(2000, 20)
 
@@ -32,14 +47,20 @@ if __name__ == "__main__":
     y = pd.Series(y.ravel())
     y.name = "target"
 
+    num_columns = X.shape[1]
+    device = "cuda" if args.use_gpu else "cpu"
+
     dataset = RayDataset(X, y)
 
     reg = RayTrainNeuralNet(
         RegressorModule,
         criterion=nn.MSELoss,
-        num_workers=4,
-        max_epochs=args.max_epochs,
+        num_workers=args.num_workers,
+        max_epochs=args.epochs,
         lr=0.1,
+        device=device,
+        module__input_dim=num_columns,
+        module__output_dim=1,
         #train_split=None,
         # Shuffle training data on each epoch
         #iterator_train__shuffle=True,

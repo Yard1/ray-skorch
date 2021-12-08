@@ -551,12 +551,15 @@ class RayTrainNeuralNet(NeuralNet):
         def train_func(config):
             label = config.pop("label")
             dataset_class = config.pop("dataset_class")
+            dataset_params = config.pop("dataset_params")
             ray.data.set_progress_bars(show_progress_bars)
 
             X_train = dataset_class(
                 train.get_dataset_shard("dataset_train"), label)
             X_val = dataset_class(
                 train.get_dataset_shard("dataset_valid"), label)
+            X_train.set_params(**dataset_params)
+            X_val.set_params(**dataset_params)
 
             original_device = est.device
             est.set_params(device=train.torch.get_device())
@@ -578,7 +581,8 @@ class RayTrainNeuralNet(NeuralNet):
                 train_func,
                 config={
                     "dataset_class": self.dataset,
-                    "label": dataset_train.y
+                    "label": dataset_train.y,
+                    "dataset_params": dataset_train.get_params(),
                 },
                 dataset={
                     "dataset_train": dataset_train.X,
