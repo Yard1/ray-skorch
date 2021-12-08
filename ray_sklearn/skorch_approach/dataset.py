@@ -65,14 +65,14 @@ class RayDataset(SkorchDataset):
                 self.X = [
                     _convert_to_dataframe(x, i) for i, x in enumerate(self.X)
                 ]
-                self.X_multiple_input_columns = [x.columns for x in self.X]
+                self._X_multiple_input_columns = [x.columns for x in self.X]
                 self.X = pd.concat(self.X, axis=1)
             elif isinstance(self.X, dict):
                 self.X = {
                     k: _convert_to_dataframe(x, k)
                     for k, x in self.X.items()
                 }
-                self.X_multiple_input_columns = {
+                self._X_multiple_input_columns = {
                     k: x.columns
                     for k, x in self.X.items()
                 }
@@ -80,7 +80,6 @@ class RayDataset(SkorchDataset):
                 self.X = pd.concat(self.X, axis=1)
             elif not is_pandas_ndframe(self.X):
                 self.X = _convert_to_dataframe(self.X)
-                self.X_multiple_input_columns = None
             self.X = pd.concat((self.X, self.y), axis=1)
             self.X = from_pandas(self.X)
             self._init_dataset(self.X, _pandas_get_name_or_column(self.y))
@@ -102,8 +101,14 @@ class RayDataset(SkorchDataset):
         self.X_indexing = check_indexing(X)
         self.y_indexing = check_indexing(y)
         self.X_is_ndframe = is_pandas_ndframe(X)
-        if not hasattr(self, "X_multiple_input_columns"):
-            self.X_multiple_input_columns = None
+
+    @property
+    def X_multiple_input_columns(self):
+        return getattr(self, "_X_multiple_input_columns", None)
+
+    @X_multiple_input_columns.setter
+    def X_multiple_input_columns(self, value):
+        self._X_multiple_input_columns = value
 
     def get_params(self) -> Dict[str, Any]:
         return {"X_multiple_input_columns": self.X_multiple_input_columns}
