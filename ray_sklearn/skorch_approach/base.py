@@ -27,7 +27,9 @@ from torch.nn.parallel.distributed import DistributedDataParallel
 
 from sklearn.base import clone
 
-from ray_sklearn.skorch_approach.callbacks.train import PrintCallback, TBXProfilerCallback
+from ray_sklearn.skorch_approach.callbacks.train import (
+    HistoryLoggingCallback, TableHistoryPrintCallback,
+    DetailedHistoryPrintCallback, TBXProfilerCallback)
 from ray_sklearn.skorch_approach.callbacks.skorch import (
     TrainCheckpoint, TrainReportCallback, PerformanceLogger, EpochTimerS,
     PytorchProfilerLogger)
@@ -468,8 +470,12 @@ class RayTrainNeuralNet(NeuralNet):
 
     def _get_ray_train_callbacks(self) -> Dict[str, TrainingCallback]:
         callbacks = {}
-        print_callback = PrintCallback()
-        callbacks["print_callback"] = print_callback
+        if self.verbose <= 0:
+            history_callback = HistoryLoggingCallback()
+        else:
+            history_callback = DetailedHistoryPrintCallback(
+            ) if self.profile else TableHistoryPrintCallback()
+        callbacks["history_callback"] = history_callback
         if self.profile:
             tbx_callback = TBXProfilerCallback()
             callbacks["tbx_callback"] = tbx_callback
@@ -592,7 +598,7 @@ class RayTrainNeuralNet(NeuralNet):
         self.worker_histories_ = [self.history_] + [
             result["history"] for result in results[1:]
         ]
-        self.ray_train_history_ = callbacks["print_callback"]._history
+        self.ray_train_history_ = callbacks["history_callback"]._history
         return self
 
     def predict_proba(self, X):

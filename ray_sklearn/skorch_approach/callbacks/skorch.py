@@ -17,6 +17,7 @@ from skorch.utils import _check_f_arguments, noop
 from ray_sklearn.skorch_approach.utils import (is_in_train_session,
                                                is_using_gpu)
 from ray_sklearn.skorch_approach.callbacks.constants import PROFILER_KEY
+from ray_sklearn.skorch_approach.callbacks.utils import SortedKeysMixin
 
 
 class RayTrainCallback(Callback):
@@ -348,7 +349,7 @@ class TrainCheckpoint(Checkpoint, RayTrainCallback):
         return io.BytesIO(value)
 
 
-class TrainReportCallback(RayTrainCallback):
+class TrainReportCallback(SortedKeysMixin, RayTrainCallback):
     def __init__(
             self,
             keys_ignored=None,
@@ -367,45 +368,14 @@ class TrainReportCallback(RayTrainCallback):
         #self.keys_ignored_.add("batches")
         return self
 
-    def _sorted_keys(self, keys):
-        """Sort keys, dropping the ones that should be ignored.
-
-        The keys that are in ``self.ignored_keys`` or that end on
-        '_best' are dropped. Among the remaining keys:
-          * 'epoch' is put first;
-          * 'dur_s' is put last;
-          * keys that start with 'event_' are put just before 'dur_s';
-          * all remaining keys are sorted alphabetically.
-        """
-        sorted_keys = []
-
-        # make sure "epoch" comes first
-        if ("epoch" in keys) and ("epoch" not in self.keys_ignored_):
-            sorted_keys.append("epoch")
-
-        # ignore keys like *_best or event_*
-        for key in filter_log_keys(
-                sorted(keys), keys_ignored=self.keys_ignored_):
-            if key != "dur_s":
-                sorted_keys.append(key)
-
-        # add event_* keys
-        for key in sorted(keys):
-            if key.startswith("event_") and (key not in self.keys_ignored_):
-                sorted_keys.append(key)
-
-        # make sure "dur" comes last
-        if ("dur_s" in keys) and ("dur_s" not in self.keys_ignored_):
-            sorted_keys.append("dur_s")
-
-        return sorted_keys
-
     def on_epoch_end(self, net, **kwargs):
         if not is_in_train_session():
             return
         history = net.history
         hist = history[-1]
-        train.report(**{
-            k: v
-            for k, v in hist.items() if k in self._sorted_keys(hist.keys())
-        })
+        train.report(
+            **{
+                k: v
+                for k, v in hist.items() if k in self._sorted_keys(
+                    hist.keys(), self.keys_ignored_, filter_keys=False)
+            })
