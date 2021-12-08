@@ -560,7 +560,6 @@ class RayTrainNeuralNet(NeuralNet):
 
             original_device = est.device
             est.set_params(device=train.torch.get_device())
-            print(est.device)
             est.fit(X_train, None, epochs=epochs, X_val=X_val, **fit_params)
 
             if train.world_rank() == 0:
