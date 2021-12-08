@@ -521,6 +521,9 @@ class RayTrainNeuralNet(NeuralNet):
             y_val=None,
             checkpoint=None,
             **fit_params):
+        if self.warm_start:
+            raise NotImplementedError("warm start is not yet supported")
+
         if not self.warm_start or not self.initialized_:
             self.initialize()
 
