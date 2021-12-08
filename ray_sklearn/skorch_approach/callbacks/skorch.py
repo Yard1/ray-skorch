@@ -20,7 +20,7 @@ from ray_sklearn.skorch_approach.callbacks.constants import PROFILER_KEY
 from ray_sklearn.skorch_approach.callbacks.utils import SortedKeysMixin
 
 
-class RayTrainCallback(Callback):
+class TrainSklearnCallback(Callback):
     def on_forward_pass_begin(self, net, X=None, **kwargs):
         """Called at the beginning of forward pass."""
 
@@ -56,7 +56,7 @@ class EpochTimerS(EpochTimer):
         net.history.record('dur_s', time.time() - self.epoch_start_time_)
 
 
-class PerformanceLogger(RayTrainCallback):
+class PerformanceLogger(TrainSklearnCallback):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
@@ -92,7 +92,7 @@ class PerformanceLogger(RayTrainCallback):
                                  self.backward_pass_time_)
 
 
-class PytorchProfilerLogger(RayTrainCallback):
+class PytorchProfilerLogger(TrainSklearnCallback):
     def __init__(self, profiler_args=None, **kwargs) -> None:
         self.profiler_args = profiler_args
         super().__init__(**kwargs)
@@ -104,7 +104,7 @@ class PytorchProfilerLogger(RayTrainCallback):
                 os.makedirs(dir_name, exist_ok=True)
             except Exception:
                 raise RuntimeError("Can't create directory: " + dir_name)
-        filename = f"worker_{train.world_rank()}_{self.epoch_}.pt.trace.json"
+        filename = f"worker_{self.worker_rank_}_{self.epoch_}.pt.trace.json"
         path = os.path.join(dir_name, filename)
         # TODO consider compression
         try:
@@ -118,13 +118,15 @@ class PytorchProfilerLogger(RayTrainCallback):
 
     def on_train_begin(self, net, X=None, y=None, **kwargs):
         self.has_gpu_ = is_using_gpu(net.device)
-        self.profiler_args_ = self.profiler_args or {
+        profiler_args = self.profiler_args or {}
+        self.profiler_args_ =  {**{
             "activities": [ProfilerActivity.CPU] + [ProfilerActivity.CUDA]
             if self.has_gpu_ else [],
             "with_stack": False,
-            "schedule": schedule(wait=0, warmup=1, active=4),
+            # "schedule": schedule(wait=0, warmup=1, active=4),
             "on_trace_ready": self._trace_handler
-        }
+        }, **profiler_args}
+        self.worker_rank_ = train.world_rank()
         self.epoch_ = 0
         self.record_functions_ = {}
         self.profiler_ = profile(**self.profiler_args_)
@@ -210,7 +212,7 @@ def default_monitor(net):
     return True
 
 
-class TrainCheckpoint(Checkpoint, RayTrainCallback):
+class TrainCheckpoint(Checkpoint, TrainSklearnCallback):
     def __init__(self,
                  monitor: Union[str, Callable] = default_monitor,
                  f_params: bool = True,
@@ -349,7 +351,7 @@ class TrainCheckpoint(Checkpoint, RayTrainCallback):
         return io.BytesIO(value)
 
 
-class TrainReportCallback(SortedKeysMixin, RayTrainCallback):
+class TrainReportCallback(SortedKeysMixin, TrainSklearnCallback):
     def __init__(
             self,
             keys_ignored=None,
