@@ -1,20 +1,16 @@
 import argparse
-
-import numpy as np
 import pandas as pd
-
-from torch import nn
-from pprint import pprint
-
 import ray
-import ray.data
+from torch import nn
+
+from ray.data import from_pandas
+
 from ray_sklearn.skorch_approach.base import RayTrainNeuralNet
-from ray_sklearn.skorch_approach.dataset import RayDataset
+from ray_sklearn.skorch_approach.callbacks.constants import PROFILER_KEY
+from ray_sklearn.skorch_approach.callbacks.skorch import PytorchProfilerLogger
+from ray_sklearn.skorch_approach.callbacks.train import DetailedHistoryPrintCallback
 
 from basic_example import data_creator, RegressorModule
-
-
-ray.data.set_progress_bars(False)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -46,11 +42,15 @@ if __name__ == "__main__":
     X = pd.DataFrame(X)
     y = pd.Series(y.ravel())
     y.name = "target"
-
+    
+    columns = list(X.columns)
     num_columns = X.shape[1]
+
+    X["target"] = y
+
     device = "cuda" if args.use_gpu else "cpu"
 
-    dataset = RayDataset(X, y)
+    dataset = from_pandas(X)
 
     reg = RayTrainNeuralNet(
         RegressorModule,
@@ -61,14 +61,19 @@ if __name__ == "__main__":
         device=device,
         module__input_dim=num_columns,
         module__output_dim=1,
+        profile=True,
+        callbacks=[("profiler",
+                    PytorchProfilerLogger(profiler_args=dict(with_stack=True)))
+                   ],
+        train_callbacks=[
+            ("print",
+             DetailedHistoryPrintCallback(keys_to_not_print={PROFILER_KEY}))
+        ]
         #train_split=None,
         # Shuffle training data on each epoch
         #iterator_train__shuffle=True,
     )
     reg.fit(dataset, "target")
-    #print(reg.predict(X))
+    print(reg.ray_train_history_)
 
-    #pprint(reg.history)
-    #pprint(reg.worker_histories_)
-    #pprint(reg.ray_train_history_)
     print("Done!")

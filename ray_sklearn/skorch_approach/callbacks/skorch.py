@@ -17,12 +17,13 @@ from skorch.utils import _check_f_arguments, noop
 from ray_sklearn.skorch_approach.utils import (is_in_train_session,
                                                is_using_gpu)
 from ray_sklearn.skorch_approach.callbacks.constants import PROFILER_KEY
+from ray_sklearn.skorch_approach.callbacks.utils import SortedKeysMixin
 
 if TYPE_CHECKING:
     from ray_sklearn.skorch_approach.base import _WorkerRayTrainNeuralNet
 
 
-class RayTrainCallback(Callback):
+class TrainSklearnCallback(Callback):
     """Abstract extension of the skorch ``Callback`` class.
 
     Adds several new notify points."""
@@ -62,7 +63,7 @@ class EpochTimerS(EpochTimer):
         net.history.record('dur_s', time.time() - self.epoch_start_time_)
 
 
-class PerformanceLogger(RayTrainCallback):
+class PerformanceLogger(TrainSklearnCallback):
     """Logs times taken for several operations.
 
     Operations logged:
@@ -108,7 +109,7 @@ class PerformanceLogger(RayTrainCallback):
                                  self.backward_pass_time_)
 
 
-class PytorchProfilerLogger(RayTrainCallback):
+class PytorchProfilerLogger(TrainSklearnCallback):
     """Saves the profiler state to worker history so that it can be retrieved
     by Ray Train during ``train.report()`` (through ``TrainReportCallback``).
 
@@ -139,7 +140,7 @@ class PytorchProfilerLogger(RayTrainCallback):
                 os.makedirs(dir_name, exist_ok=True)
             except Exception:
                 raise RuntimeError("Can't create directory: " + dir_name)
-        filename = f"worker_{train.world_rank()}_{self.epoch_}.pt.trace.json"
+        filename = f"worker_{self.worker_rank_}_{self.epoch_}.pt.trace.json"
         path = os.path.join(dir_name, filename)
         # TODO consider compression
         try:
@@ -161,6 +162,7 @@ class PytorchProfilerLogger(RayTrainCallback):
             # "schedule": schedule(wait=0, warmup=1, active=4),
             "on_trace_ready": self._trace_handler
         }, **profiler_args}
+        self.worker_rank_ = train.world_rank()
         self.epoch_ = 0
         self.record_functions_ = {}
         self.profiler_ = profile(**self.profiler_args_)
@@ -246,7 +248,7 @@ def default_monitor(net):
     return True
 
 
-class TrainCheckpoint(Checkpoint, RayTrainCallback):
+class TrainCheckpoint(Checkpoint, TrainSklearnCallback):
     """Save and load Ray Train checkpoints.
 
     By default, the checkpoint is saved every epoch. The behavior can
@@ -424,7 +426,7 @@ class TrainCheckpoint(Checkpoint, RayTrainCallback):
         return io.BytesIO(value)
 
 
-class TrainReportCallback(RayTrainCallback):
+class TrainReportCallback(SortedKeysMixin, TrainSklearnCallback):
     """Report the last history entry from a worker to Ray Train.
 
     Args:
@@ -450,39 +452,6 @@ class TrainReportCallback(RayTrainCallback):
         #self.keys_ignored_.add("batches")
         return self
 
-    def _sorted_keys(self, keys):
-        """Sort keys, dropping the ones that should be ignored.
-
-        The keys that are in ``self.ignored_keys`` or that end on
-        '_best' are dropped. Among the remaining keys:
-          * 'epoch' is put first;
-          * 'dur_s' is put last;
-          * keys that start with 'event_' are put just before 'dur_s';
-          * all remaining keys are sorted alphabetically.
-        """
-        sorted_keys = []
-
-        # make sure "epoch" comes first
-        if ("epoch" in keys) and ("epoch" not in self.keys_ignored_):
-            sorted_keys.append("epoch")
-
-        # ignore keys like *_best or event_*
-        for key in filter_log_keys(
-                sorted(keys), keys_ignored=self.keys_ignored_):
-            if key != "dur_s":
-                sorted_keys.append(key)
-
-        # add event_* keys
-        for key in sorted(keys):
-            if key.startswith("event_") and (key not in self.keys_ignored_):
-                sorted_keys.append(key)
-
-        # make sure "dur" comes last
-        if ("dur_s" in keys) and ("dur_s" not in self.keys_ignored_):
-            sorted_keys.append("dur_s")
-
-        return sorted_keys
-
     def on_epoch_end(self, net, **kwargs):
         if not is_in_train_session():
             return
@@ -490,6 +459,6 @@ class TrainReportCallback(RayTrainCallback):
         train.report(
             **{
                 k: v
-                for k, v in history.items()
-                if k in self._sorted_keys(history.keys())
+                for k, v in history.items() if k in self._sorted_keys(
+                    history.keys(), self.keys_ignored_, filter_keys=False)
             })

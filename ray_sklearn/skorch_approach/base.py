@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List, Optional, Type, Union
+from typing import Callable, Dict, List, Optional, Tuple, Type, Union
 from contextlib import AbstractContextManager
 import io
 import numpy as np
@@ -26,14 +26,17 @@ import torch
 
 from sklearn.base import clone
 
-from ray_sklearn.skorch_approach.callbacks.train import PrintCallback, TBXProfilerCallback
+from ray_sklearn.skorch_approach.callbacks.train import (
+    HistoryLoggingCallback, TableHistoryPrintCallback,
+    DetailedHistoryPrintCallback, TBXProfilerCallback)
 from ray_sklearn.skorch_approach.callbacks.skorch import (
-    TrainCheckpoint, TrainReportCallback, PerformanceLogger, EpochTimerS,
-    PytorchProfilerLogger)
+    TrainSklearnCallback, TrainCheckpoint, TrainReportCallback,
+    PerformanceLogger, EpochTimerS, PytorchProfilerLogger)
 from ray_sklearn.skorch_approach.dataset import (FixedSplit, PipelineIterator,
                                                  dataset_factory)
-from ray_sklearn.skorch_approach.utils import (
-    is_in_train_session, is_dataset_or_ray_dataset, insert_before_substring)
+from ray_sklearn.skorch_approach.utils import (add_callback_if_not_already_in,
+                                               is_in_train_session,
+                                               is_dataset_or_ray_dataset)
 
 _docstring_neural_net_ray_args = """    num_workers : int
       Number of Ray Train workers to use.
@@ -193,21 +196,35 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
         #    ]
         if self.profile:
             performance_callback = PerformanceLogger()
-            performance_callback.initialize()
+            if add_callback_if_not_already_in("ray_performance_logger",
+                                              performance_callback,
+                                              self.callbacks_):
+                performance_callback.initialize()
             profiler_callback = PytorchProfilerLogger()
-            profiler_callback.initialize()
-            self.callbacks_ += [("ray_performance_logger",
-                                 performance_callback),
-                                ("ray_pytorch_profiler_logger",
-                                 profiler_callback)]
+            if add_callback_if_not_already_in("ray_pytorch_profiler_logger",
+                                              profiler_callback,
+                                              self.callbacks_):
+                profiler_callback.initialize()
         checkpoint_callback = TrainCheckpoint(
             save_checkpoints=self.save_checkpoints)
-        checkpoint_callback.initialize()
-        self.callbacks_ += [("ray_checkpoint", checkpoint_callback)]
+        if add_callback_if_not_already_in(
+                "ray_checkpoint", checkpoint_callback, self.callbacks_):
+            checkpoint_callback.initialize()
 
         report_callback = TrainReportCallback()
-        report_callback.initialize()
-        self.callbacks_ += [("ray_train", report_callback)]
+        if add_callback_if_not_already_in("ray_report", report_callback,
+                                          self.callbacks_):
+            report_callback.initialize()
+
+        # make sure the report callback is at the end
+        if not isinstance(self.callbacks_[-1][-1], TrainReportCallback):
+            report_callback = next(
+                ((name, callback) for name, callback in self.callbacks_
+                 if isinstance(callback, TrainReportCallback)), None)
+            if report_callback is None:
+                raise RuntimeError("TrainReportCallback missing")
+            self.callbacks_.remove(report_callback)
+            self.callbacks_.append(report_callback)
         return self
 
     def initialize_module(self):
@@ -383,7 +400,9 @@ _WorkerRayTrainNeuralNet.__doc__ = insert_before_substring(
 
 
 class RayTrainNeuralNet(NeuralNet):
-    prefixes_ = NeuralNet.prefixes_ + ["worker_dataset", "trainer"]
+    prefixes_ = NeuralNet.prefixes_ + [
+        "worker_dataset", "trainer", "train_callbacks"
+    ]
 
     def __init__(self,
                  module,
@@ -398,7 +417,10 @@ class RayTrainNeuralNet(NeuralNet):
                  dataset=dataset_factory,
                  worker_dataset=SkorchDataset,
                  train_split=FixedSplit(0.2),
-                 callbacks=None,
+                 callbacks: Union[List[Tuple[str, TrainSklearnCallback]], str,
+                                  None] = None,
+                 train_callbacks: Optional[List[Tuple[
+                     str, TrainingCallback]]] = None,
                  predict_nonlinearity='auto',
                  warm_start=False,
                  verbose=1,
@@ -412,6 +434,7 @@ class RayTrainNeuralNet(NeuralNet):
         self.num_workers = num_workers
         self.profile = profile
         self.save_checkpoints = save_checkpoints
+        self.train_callbacks = train_callbacks
         super().__init__(
             module,
             criterion,
@@ -446,6 +469,9 @@ class RayTrainNeuralNet(NeuralNet):
 
         self.initialized_ = True
         return self
+
+    def _initialize_callbacks(self):
+        self.callbacks_ = []
 
     def _initialize_trainer(self):
         # this init context is for consistency and not being used at the moment
@@ -505,14 +531,33 @@ class RayTrainNeuralNet(NeuralNet):
         est.set_params(dataset=self.worker_dataset)
         return est
 
-    def _get_ray_train_callbacks(self) -> Dict[str, TrainingCallback]:
-        callbacks = {}
-        print_callback = PrintCallback()
-        callbacks["print_callback"] = print_callback
+    def get_default_train_callbacks(
+            self) -> List[Tuple[str, TrainingCallback]]:
+        callbacks = []
+        if self.verbose <= 0:
+            history_callback = HistoryLoggingCallback()
+        else:
+            history_callback = DetailedHistoryPrintCallback(
+            ) if self.profile else TableHistoryPrintCallback()
+        callbacks.append(("history_logger", history_callback))
         if self.profile:
             tbx_callback = TBXProfilerCallback()
-            callbacks["tbx_callback"] = tbx_callback
+            callbacks.append(("tbx_profiler_logger", tbx_callback))
         return callbacks
+
+    def get_train_callbacks(self) -> List[Tuple[str, TrainingCallback]]:
+        # TODO guard against duplicate keys
+        # TODO do what initialize_callbacks does
+        self.train_callbacks_ = [
+            callback
+            if isinstance(callback, tuple) else (callback.__name__, callback)
+            for callback in self.train_callbacks
+        ]
+        default_callbacks = self.get_default_train_callbacks()
+        for name, callback in default_callbacks:
+            add_callback_if_not_already_in(name, callback,
+                                           self.train_callbacks_)
+        return self.train_callbacks_
 
     def fit(self,
             X,
@@ -587,16 +632,18 @@ class RayTrainNeuralNet(NeuralNet):
         def train_func(config):
             label = config.pop("label")
             dataset_class = config.pop("dataset_class")
+            dataset_params = config.pop("dataset_params")
             ray.data.set_progress_bars(show_progress_bars)
 
             X_train = dataset_class(
                 train.get_dataset_shard("dataset_train"), label)
             X_val = dataset_class(
                 train.get_dataset_shard("dataset_valid"), label)
+            X_train.set_params(**dataset_params)
+            X_val.set_params(**dataset_params)
 
             original_device = est.device
             est.set_params(device=train.torch.get_device())
-            print(est.device)
             est.fit(X_train, None, epochs=epochs, X_val=X_val, **fit_params)
 
             if train.world_rank() == 0:
@@ -609,13 +656,14 @@ class RayTrainNeuralNet(NeuralNet):
             output["history"] = est.history_
             return output
 
-        callbacks = self._get_ray_train_callbacks()
+        callbacks = {k: v for k, v in self.get_train_callbacks()}
         with ray_trainer_start_shutdown(self.trainer_):
             results = self.trainer_.run(
                 train_func,
                 config={
                     "dataset_class": self.dataset,
-                    "label": dataset_train.y
+                    "label": dataset_train.y,
+                    "dataset_params": dataset_train.get_params(),
                 },
                 dataset={
                     "dataset_train": dataset_train.X,
@@ -624,6 +672,7 @@ class RayTrainNeuralNet(NeuralNet):
                 callbacks=list(callbacks.values()),
                 checkpoint=checkpoint)
 
+        # get back params and history from rank 0 worker
         self.initialize(initialize_ray=False)
         params = results[0]
         self.history_ = params.pop("history")
@@ -634,8 +683,12 @@ class RayTrainNeuralNet(NeuralNet):
         self.worker_histories_ = [self.history_] + [
             result["history"] for result in results[1:]
         ]
-        if "print_callback" in callbacks:
-            self.ray_train_history_ = callbacks["print_callback"]._history
+
+        history_logger = next(
+            (callback for callback in callbacks.values()
+             if isinstance(callback, HistoryLoggingCallback)), None)
+        if history_logger:
+            self.ray_train_history_ = history_logger._history
         else:
             self.ray_train_history_ = None
         return self
