@@ -13,7 +13,6 @@ from ray_sklearn.skorch_approach.dataset import RayDataset
 
 from basic_example import data_creator, RegressorModule
 
-
 ray.data.set_progress_bars(False)
 
 if __name__ == "__main__":

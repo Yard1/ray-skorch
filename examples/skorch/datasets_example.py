@@ -41,7 +41,7 @@ if __name__ == "__main__":
     X = pd.DataFrame(X)
     y = pd.Series(y.ravel())
     y.name = "target"
-    
+
     columns = list(X.columns)
     num_columns = X.shape[1]
 

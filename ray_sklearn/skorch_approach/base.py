@@ -34,9 +34,9 @@ from ray_sklearn.skorch_approach.callbacks.skorch import (
     PerformanceLogger, EpochTimerS, PytorchProfilerLogger)
 from ray_sklearn.skorch_approach.dataset import (FixedSplit, PipelineIterator,
                                                  dataset_factory)
-from ray_sklearn.skorch_approach.utils import (add_callback_if_not_already_in,
-                                               is_in_train_session,
-                                               is_dataset_or_ray_dataset)
+from ray_sklearn.skorch_approach.utils import (
+    add_callback_if_not_already_in, is_in_train_session,
+    is_dataset_or_ray_dataset, insert_before_substring)
 
 _docstring_neural_net_ray_args = """    num_workers : int
       Number of Ray Train workers to use.
@@ -45,6 +45,13 @@ _docstring_neural_net_ray_args = """    num_workers : int
 
 _docstring_neural_net_ray_worker_dataset = """    worker_dataset : torch Dataset (default=skorch.dataset.Dataset)
       Same as ``dataset``, but used internally inside workers. Should use torch Tensors.
+
+"""
+
+_docstring_neural_net_ray_train_callbacks = """    train_callbacks : None or list of tuples (str, Ray TrainingCallback instance) (default=None)
+      List of Ray Train callbacks to enable in addition to necessary default callbacks. If a
+      tuple with the same name or the same callback type as one of the default callbacks is passed,
+      the default callback will be overriden.
 
 """
 
@@ -60,6 +67,22 @@ _docstring_neural_net_ray_kwargs = """    profile : bool (default=False)
     save_checkpoints : bool (default=True)
       Whether to enable or disable saving checkpoints (through
       a callback).
+
+"""
+
+_docstring_neural_net_ray_fit_params = """        X_val : validation data, compatible with skorch.dataset.Dataset
+          The same data types as for ``X`` are supported. If not
+          provided, validation set will be obtained through the
+          ``train_split``.
+
+        y_val : validation target data, compatible with skorch.dataset.Dataset
+          The same data types as for ``X`` are supported. If not
+          provided, validation set will be obtained through the
+          ``train_split``.
+
+        checkpoint : dict or None (default=None)
+          Train-Sklearn checkpoint to resume the training from (if
+          ``load_checkpoint`` parameter is set to True).
 
 """
 
@@ -83,7 +106,7 @@ class ray_trainer_start_shutdown(AbstractContextManager):
         self.trainer.start(self.initialization_hook)
 
     def __exit__(self, __exc_type, __exc_value, __traceback) -> None:
-        """Shutdowns the started ``Trainer``."""
+        """Shuts down the started ``Trainer``."""
         self.trainer.shutdown()
 
 
@@ -736,7 +759,25 @@ RayTrainNeuralNet.__doc__ = NeuralNet.__doc__.replace(
     callbacks are installed for the user's convenience.""",
     """    By default several logging and reporting callbacks for both Skorch
     and Ray Train are added to provide necessary functionality and
-    a basic output.""")
+    a basic output.""").replace(
+        """    iterator_train : torch DataLoader
+      The default PyTorch :class:`~torch.utils.data.DataLoader` used for
+      training data.
+
+    iterator_valid : torch DataLoader
+      The default PyTorch :class:`~torch.utils.data.DataLoader` used for
+      validation and test data, i.e. during inference.""",
+        """    iterator_train : PipelineIterator
+      Iterator over ray.data.DatasetPipeline with conversion to torch
+      Tensors. Used for validation and test data, i.e. during inference.
+      Setting ``iterator_train__feature_columns`` and
+      ``iterator_train__feature_column_dtypes`` gives control over what
+      features and datatypes are set. Those parameters can also take in
+      a list of lists/dicts in case of multi-input modules.
+
+    iterator_valid : torch PipelineIterator
+      As in ``iterator_train``, but for validation data. Please note
+      that it needs its parameters to be set separately.""")
 RayTrainNeuralNet.__doc__ = insert_before_substring(
     RayTrainNeuralNet.__doc__, _docstring_neural_net_ray_worker_dataset,
     "    train_split : None or callable")
@@ -744,8 +785,34 @@ RayTrainNeuralNet.__doc__ = insert_before_substring(
     RayTrainNeuralNet.__doc__, _docstring_neural_net_ray_args,
     "    optimizer : torch optim")
 RayTrainNeuralNet.__doc__ = insert_before_substring(
+    RayTrainNeuralNet.__doc__, _docstring_neural_net_ray_train_callbacks,
+    "    predict_nonlinearity : callable")
+RayTrainNeuralNet.__doc__ = insert_before_substring(
     RayTrainNeuralNet.__doc__, _docstring_neural_net_ray_trainer,
     "    Attributes")
 RayTrainNeuralNet.__doc__ = insert_before_substring(
     RayTrainNeuralNet.__doc__, _docstring_neural_net_ray_kwargs,
     "    Attributes")
+
+RayTrainNeuralNet.fit.__doc__ = NeuralNet.fit.__doc__.replace(
+    " (unless ``warm_start`` is True).", "").replace(
+        """            * numpy arrays
+            * torch tensors
+            * pandas DataFrame or Series
+            * scipy sparse CSR matrices
+            * a dictionary of the former three
+            * a list/tuple of the former three
+            * a Dataset""", """            * numpy arrays
+            * pandas DataFrame or Series
+            * a dictionary of the former two
+            * a list/tuple of the former two
+            * a ray.data.Dataset
+            * a ray.data.DatasetPipeline
+            * a Dataset
+
+          All inputs will be automatically converted to ray.data
+          formats internally.""")
+
+RayTrainNeuralNet.fit.__doc__ = insert_before_substring(
+    RayTrainNeuralNet.fit.__doc__, _docstring_neural_net_ray_fit_params,
+    "        **fit_params : dict")
