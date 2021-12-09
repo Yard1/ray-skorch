@@ -153,88 +153,75 @@ if __name__ == "__main__":
     ]
 
     ray.init(address=address)
-    dask.config.set(scheduler=ray_dask_get)
-    scaler = StandardScaler(copy=False)
-    dask_df = scaler.fit_transform(
-        dd.read_csv(os.path.expanduser("~/data/train.csv"))[
-            features + [target]].dropna().astype("float32"))
-    dask_df = dask_df.sample(frac=fraction)
-    dataset = ray.data.from_dask(dask_df)
 
-    print(dataset)
-    print("dataset loaded")
-
-    dtypes = [torch.float] * len(features)
-
-    val_split = 0.1
-    test_split = 0.2
-    train_split = 1 - val_split - test_split
-
-    num_records = dataset.count()
-    train_val_split = int(num_records * train_split)
-    val_test_split = int(num_records * (train_split + test_split))
-    train_dataset, validation_dataset, test_dataset = dataset.random_shuffle().split_at_indices(
-        [train_val_split, val_test_split])
-
-    train_dataset_pipeline = train_dataset.repeat(num_epochs)
-    if shuffle:
-        train_dataset_pipeline = train_dataset_pipeline.random_shuffle_each_window()
-    validation_dataset_pipeline = validation_dataset.repeat(num_epochs)
-
-    datasets = {
-        "train_dataset_pipeline": train_dataset_pipeline,
-        "validation_dataset_pipeline": validation_dataset_pipeline
-    }
+    from sklearn.datasets import make_regression
+    def data_creator(rows, cols):
+        X_regr, y_regr = make_regression(
+            rows, cols, n_informative=cols // 2, random_state=0)
+        X_regr = X_regr.astype(np.float32)
+        y_regr = y_regr.astype(np.float32) / 100
+        y_regr = y_regr.reshape(-1, 1)
+        return (X_regr, y_regr)
 
 
-    if worker_batch_size:
-        print(f"Using worker batch size: {worker_batch_size}")
-        train_worker_batch_size = worker_batch_size
-    else:
-        train_worker_batch_size = batch_size / num_workers
-        print(f"Using global batch size: {batch_size}. "
-              f"For {num_workers} workers the per worker batch size is {train_worker_batch_size}.")
+    import torch.nn.functional as F
+    class RegressorModule(nn.Module):
+        def __init__(
+                self,
+                input_dim,
+                output_dim,
+                num_units=10,
+                nonlin=F.relu,
+        ):
+            super().__init__()
+            self.num_units = num_units
+            self.nonlin = nonlin
+
+            self.dense0 = nn.Linear(input_dim, num_units)
+            self.nonlin = nonlin
+            self.dense1 = nn.Linear(num_units, 10)
+            self.output = nn.Linear(10, output_dim)
+
+        def forward(self, X: torch.Tensor, **kwargs):
+            X = self.nonlin(self.dense0(X))
+            X = F.relu(self.dense1(X))
+            X = self.output(X)
+            return X
 
 
     def train_func(config):
-        print(datasets)
-        train_dataset_pipeline = train.get_dataset_shard(
-            "train_dataset_pipeline")
-        validation_dataset_pipeline = train.get_dataset_shard(
-            "validation_dataset_pipeline")
-        train_dataset_iterator = train_dataset_pipeline.iter_epochs()
-        validation_dataset_iterator = validation_dataset_pipeline.iter_epochs()
 
-        model = TabNet(input_dim=len(features), output_dim=1)
-        model = train.torch.prepare_model(model, ddp_kwargs={
-            "find_unused_parameters": True})
+        # model = RegressorModule(input_dim=20, output_dim=1)
+
+        model = TabNet(input_dim=20, output_dim=1)
+
+        model = train.torch.prepare_model(model)
+
+
         criterion = nn.MSELoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.7, patience=10, threshold=1e-5)
 
         device = train.torch.get_device()
 
         results = []
         for i in range(num_epochs):
-            train_dataset = next(train_dataset_iterator)
-            validation_dataset = next(validation_dataset_iterator)
-            train_torch_dataset = train_dataset.to_torch(
-                label_column=target, batch_size=train_worker_batch_size)
-            validation_torch_dataset = validation_dataset.to_torch(
-                label_column=target, batch_size=train_worker_batch_size)
+            # train_dataset = next(train_dataset_iterator)
+            # train_torch_dataset = train_dataset.to_torch(
+            #     label_column=target, batch_size=train_worker_batch_size)
 
-            last_time = time.time()
+            X, y = data_creator(2048, 20)
+            #
+            # X = pd.DataFrame(X)
+            # y = pd.Series(y.ravel())
+            # y.name = "target"
+
+            dataset = torch.utils.data.TensorDataset(torch.Tensor(X), torch.Tensor(y))
+            dataloader = torch.utils.data.DataLoader(dataset, batch_size=64)
 
             model.train()
             train_train_loss = 0
             train_num_rows = 0
-            for batch_idx, (X, y) in enumerate(train_torch_dataset):
-                if debug and batch_idx % 1000 == 0:
-                    curr_time = time.time()
-                    time_since_last = curr_time - last_time
-                    last_time = curr_time
-                    print(f"Train epoch: [{i}], batch[{batch_idx}], time[{time_since_last}]")
+            for batch_idx, (X, y) in enumerate(dataloader):
 
                 X = X.to(device)
                 y = y.to(device)
@@ -253,47 +240,24 @@ if __name__ == "__main__":
             train_loss = train_train_loss / train_num_rows  # TODO: should this be num batches or num rows?
             print(f"Train epoch: [{i}], mean square error:[{train_loss}]")
 
-            last_time = time.time()
-
-            model.eval()
-            val_total_loss = 0
-            val_num_rows = 0
-            with torch.no_grad():
-                for batch_idx, (X, y) in enumerate(validation_torch_dataset):
-                    if debug and batch_idx % 1000 == 0:
-                        curr_time = time.time()
-                        time_since_last = curr_time - last_time
-                        last_time = curr_time
-                        print(f"Validation epoch: [{i}], batch[{batch_idx}], time[{time_since_last}]")
-                    X = X.to(device)
-                    y = y.to(device)
-                    count = len(X)
-                    pred = model(X)
-                    val_total_loss += count * criterion(pred, y).item()
-                    val_num_rows += count
-            val_loss = val_total_loss / val_num_rows  # TODO: should this be num batches or num rows?
-            print(f"Validation epoch: [{i}], mean square error:[{val_loss}]")
-
-            scheduler.step(train_loss)
+            # scheduler.step(train_loss)
             curr_lr = [ group['lr'] for group in optimizer.param_groups ]
 
-            train.report(train_mse=train_loss, val_mse=val_loss, lr=curr_lr)
-
+            train.report(train_mse=train_loss, lr=curr_lr)
 
             state_dict = model.state_dict()
             from torch.nn.modules.utils import \
                 consume_prefix_in_state_dict_if_present
             consume_prefix_in_state_dict_if_present(state_dict, "module.")
             train.save_checkpoint(model_state_dict=state_dict)
-            results.append(val_loss)
-
         return results
 
     train_start = time.time()
 
     trainer = Trainer("torch", num_workers=num_workers, use_gpu=use_gpu)
     trainer.start()
-    results = trainer.run(train_func, dataset=datasets, callbacks=[AggregateLogCallback()])
+    # results = trainer.run(train_func, dataset=datasets, callbacks=[AggregateLogCallback()])
+    results = trainer.run(train_func, callbacks=[AggregateLogCallback()])
     trainer.shutdown()
 
 

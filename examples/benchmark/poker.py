@@ -1,3 +1,6 @@
+
+
+
 import argparse
 import json
 import numbers
@@ -10,13 +13,17 @@ import dask.dataframe as dd
 import numpy as np
 import ray
 import torch
+import xgboost_ray
 from dask_ml.preprocessing import StandardScaler
 from ray import train
-from ray.train import Trainer
+from ray.train import Trainer, CheckpointStrategy
 from ray.train.callbacks import JsonLoggerCallback
 from ray.util.dask import ray_dask_get
 from ray.util.ml_utils.json import SafeFallbackEncoder
 from torch import nn
+from xgboost_ray import RayDMatrix, RayParams
+
+from sklearn.metrics import mean_squared_error
 
 from ray_sklearn.models.tabnet import TabNet
 
@@ -103,6 +110,12 @@ if __name__ == "__main__":
         default=1.0,
         help="Fraction of data to train on",
     )
+    # parser.add_argument(
+    #     "--num_rows",
+    #     type=float,
+    #     default=1.0,
+    #     help="Fraction of data to train on",
+    # )
     parser.add_argument(
         "--batch-size",
         type=int,
@@ -153,18 +166,18 @@ if __name__ == "__main__":
     ]
 
     ray.init(address=address)
-    dask.config.set(scheduler=ray_dask_get)
-    scaler = StandardScaler(copy=False)
-    dask_df = scaler.fit_transform(
-        dd.read_csv(os.path.expanduser("~/data/train.csv"))[
-            features + [target]].dropna().astype("float32"))
-    dask_df = dask_df.sample(frac=fraction)
-    dataset = ray.data.from_dask(dask_df)
+
+
+    data_path = os.path.expanduser("~/data/poker.csv")
 
     print(dataset)
     print("dataset loaded")
 
     dtypes = [torch.float] * len(features)
+
+    if shuffle:
+        dataset = dataset.random_shuffle()
+
 
     val_split = 0.1
     test_split = 0.2
@@ -173,7 +186,7 @@ if __name__ == "__main__":
     num_records = dataset.count()
     train_val_split = int(num_records * train_split)
     val_test_split = int(num_records * (train_split + test_split))
-    train_dataset, validation_dataset, test_dataset = dataset.random_shuffle().split_at_indices(
+    train_dataset, validation_dataset, test_dataset = dataset.split_at_indices(
         [train_val_split, val_test_split])
 
     train_dataset_pipeline = train_dataset.repeat(num_epochs)
@@ -220,9 +233,9 @@ if __name__ == "__main__":
             train_dataset = next(train_dataset_iterator)
             validation_dataset = next(validation_dataset_iterator)
             train_torch_dataset = train_dataset.to_torch(
-                label_column=target, batch_size=train_worker_batch_size)
+                label_column=target, label_column_dtype=torch.float, feature_columns=features, feature_column_dtypes=dtypes, batch_size=train_worker_batch_size)
             validation_torch_dataset = validation_dataset.to_torch(
-                label_column=target, batch_size=train_worker_batch_size)
+                label_column=target, label_column_dtype=torch.float, feature_columns=features, feature_column_dtypes=dtypes, batch_size=train_worker_batch_size)
 
             last_time = time.time()
 
@@ -235,6 +248,8 @@ if __name__ == "__main__":
                     time_since_last = curr_time - last_time
                     last_time = curr_time
                     print(f"Train epoch: [{i}], batch[{batch_idx}], time[{time_since_last}]")
+
+
 
                 X = X.to(device)
                 y = y.to(device)
@@ -284,16 +299,81 @@ if __name__ == "__main__":
             from torch.nn.modules.utils import \
                 consume_prefix_in_state_dict_if_present
             consume_prefix_in_state_dict_if_present(state_dict, "module.")
-            train.save_checkpoint(model_state_dict=state_dict)
+            train.save_checkpoint(val_mse=val_loss, model_state_dict=state_dict)
             results.append(val_loss)
 
         return results
+
+
+
+
+    test_df = test_dataset.to_pandas()
+
+    X_test = test_df[features]
+    y_true = test_df[target]
+
+
+    ############
+    # xgboost
+    ############
+
+    train_set = RayDMatrix(train_dataset, target)
+
+    evals_result = {}
+    # Set XGBoost config.
+    xgboost_params = {
+        "tree_method": "approx",
+        "objective": "reg:squarederror",
+        "eval_metric": ["rmse"],
+    }
+
+    train_start = time.time()
+    ray_params = RayParams(
+        max_actor_restarts=0,
+        gpus_per_actor=int(use_gpu),
+        cpus_per_actor=2,
+        num_actors=num_workers)
+
+
+    # Train the classifier
+    bst = xgboost_ray.train(
+        params=xgboost_params,
+        dtrain=train_set,
+        evals=[(train_set, "train")],
+        evals_result=evals_result,
+        ray_params=ray_params,
+        verbose_eval=False,
+        num_boost_round=10)
+
+    test_set = RayDMatrix(test_dataset, target)
+    pred = xgboost_ray.predict(bst, test_set, ray_params=ray_params)
+
+    xgb_loss = mean_squared_error(y_true, pred)
+    print(f"xgboost test loss: {xgb_loss}")
+
+    # import sys
+    # sys.exit()
+
+    # train_end = time.time()
+    # train_time = train_end - train_start
+    #
+    # print(f"Training completed in {train_time} seconds.")
+
+
+
+    ############
+    # train
+    ############
+
+
+
+
 
     train_start = time.time()
 
     trainer = Trainer("torch", num_workers=num_workers, use_gpu=use_gpu)
     trainer.start()
-    results = trainer.run(train_func, dataset=datasets, callbacks=[AggregateLogCallback()])
+    results = trainer.run(train_func, dataset=datasets, callbacks=[AggregateLogCallback()], checkpoint_strategy=CheckpointStrategy(checkpoint_score_attribute="val_mse", checkpoint_score_order="min"))
     trainer.shutdown()
 
 
@@ -302,6 +382,30 @@ if __name__ == "__main__":
 
     print(f"Training completed in {train_time} seconds.")
 
+    bcp = trainer.best_checkpoint_path
+    print(f"bcp: {bcp}")
+    with bcp.open("rb") as f:
+        from ray import cloudpickle
+        best_checkpoint = cloudpickle.load(f)
+
+    # state_dict = trainer.latest_checkpoint["model_state_dict"]
+    state_dict = best_checkpoint["model_state_dict"]
+    model = TabNet(input_dim=len(features), output_dim=1)
+    model.load_state_dict(state_dict)
+
+    X_test_tensor = torch.Tensor(X_test.values)
+
+    y_test = model(X_test_tensor).detach().numpy()
+    tabnet_loss = mean_squared_error(y_true, y_test)
+
 
     print("Done!")
     print(results)
+
+    print("\n========================")
+    print(f"tabnet test loss: {tabnet_loss}")
+    print(f"xgboost test loss: {xgb_loss}")
+    print("========================")
+
+
+
