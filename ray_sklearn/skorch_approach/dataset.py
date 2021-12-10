@@ -275,10 +275,8 @@ class PipelineIterator:
                     prefetch_blocks=prefetch_blocks,
                     drop_last=drop_last):
                 label_vals = batch.pop(label_column).values
-                print(label_vals)
                 label_tensor = torch.as_tensor(
                     label_vals, dtype=label_column_dtype)
-                print(label_tensor)
                 if unsqueeze_label_column:
                     label_tensor = label_tensor.view(-1, 1)
 
