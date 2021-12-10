@@ -574,7 +574,7 @@ class RayTrainNeuralNet(NeuralNet):
         self.train_callbacks_ = [
             callback
             if isinstance(callback, tuple) else (callback.__name__, callback)
-            for callback in self.train_callbacks
+            for callback in (self.train_callbacks or [])
         ]
         default_callbacks = self.get_default_train_callbacks()
         for name, callback in default_callbacks:
