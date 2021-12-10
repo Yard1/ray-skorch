@@ -1,4 +1,4 @@
-from typing import Dict, Union, Optional, Any, List
+from typing import Dict, Tuple, Union, Optional, Any, List
 
 import numpy as np
 import pandas as pd
@@ -34,8 +34,44 @@ def _convert_to_dataframe(x: Any, column_prefix: str = ""):
     return x
 
 
+# The reason for having RayDataset and RayPipelineDataset separately
+# is to allow for FixedSplit to work correctly. They may be unified
+# in the future.
+
+
 # TODO support lists and dicts
 class RayDataset(SkorchDataset):
+    """Wrapper allowing for validation and conversion to ``ray.data.Dataset``.
+
+    The dataset will always yield a tuple of two values, the first
+    from the data (``X``) and the second from the target (``y``).
+    The data will always be a ``ray.data.Dataset``, and the target
+    will always be a string, pertaining to the name of the target
+    column in ``X``.
+
+    :class:`.RayDataset` currently works with the following data types:
+
+    * numpy arrays
+    * pandas DataFrame or Series
+    * a dictionary of the former two
+    * a list/tuple of the former two
+    * a ray.data.Dataset
+
+    For ``ray.data.DatasetPipeline``s, please use :class:`.RayPipelineDataset`.
+
+    Parameters
+    ----------
+    X : see above
+      Everything pertaining to the input data.
+
+    y : see above or None (default=None)
+      Everything pertaining to the target, if there is anything.
+
+    length : int or None (default=None)
+      Unused, left for compatibility.
+
+    """
+
     def __init__(
             self,
             X: Union[np.ndarray, pd.DataFrame, Dataset],
@@ -49,6 +85,10 @@ class RayDataset(SkorchDataset):
         self.X = X
         self.y = y
 
+        if isinstance(X, DatasetPipeline):
+            raise TypeError(
+                "RayDataset doesn't support ray.data.DatasetPipeline. "
+                "Please use RayPipelineDataset instead.")
         if isinstance(X, Dataset):
             self._init_dataset(X, y)
         else:
@@ -120,12 +160,45 @@ class RayDataset(SkorchDataset):
 
 
 class RayPipelineDataset(RayDataset):
+    """Wrapper allowing for validation and conversion to ``ray.data.DatasetPipeline``.
+
+    The dataset will always yield a tuple of two values, the first
+    from the data (``X``) and the second from the target (``y``).
+    The data will always be a ``ray.data.DatasetPipeline``, and the target
+    will always be a string, pertaining to the name of the target
+    column in ``X``.
+
+    :class:`.RayPipelineDataset` currently works with the following data types:
+
+    * numpy arrays
+    * pandas DataFrame or Series
+    * a dictionary of the former two
+    * a list/tuple of the former two
+    * a ray.data.Dataset
+    * a ray.data.DatasetPipeline
+
+    Parameters
+    ----------
+    X : see above
+      Everything pertaining to the input data.
+
+    y : see above or None (default=None)
+      Everything pertaining to the target, if there is anything.
+
+    length : int or None (default=None)
+      Unused, left for compatibility.
+
+    random_shuffle_each_window : bool (default=False)
+        Whether to shuffle each window of the pipeline.
+
+    """
+
     def __init__(
             self,
             X: Union[np.ndarray, Dataset],
             y: Optional[Union[np.ndarray, str]] = None,
             length=None,
-            random_shuffle_each_window: bool = True,
+            random_shuffle_each_window: bool = False,
     ):
         self.random_shuffle_each_window = random_shuffle_each_window
         if isinstance(X, DatasetPipeline):
@@ -147,7 +220,12 @@ class RayPipelineDataset(RayDataset):
 
 def dataset_factory(X, y=None,
                     **kwargs) -> Union[RayPipelineDataset, RayDataset]:
-    if is_dataset(X):
+    """Returns a :class:`.RayPipelineDataset` if ``X`` is a
+    `ray.data.DatasetPipeline` and a :class:`.RayDataset` otherwise.
+
+    If ``X`` is already a :class:`.RayDataset`, return ``X``.
+    """
+    if isinstance(X, RayDataset):
         return X
     if isinstance(X, DatasetPipeline):
         return RayPipelineDataset(X, y=y, **kwargs)
@@ -155,11 +233,28 @@ def dataset_factory(X, y=None,
 
 
 class FixedSplit:
+    """Class that performs the internal train/valid split on a
+    ``ray.data.Dataset``.
+
+    This class simply splits the dataset into two, similar to sklearn's
+    ``train_test_split``.
+
+    Parameters
+    ----------
+    valid_fraction : float (default=0.2)
+      The proportion of the dataset to include in the validation split.
+
+    shuffle : bool (default=True)
+      Whether to shuffle the dataset before splitting.
+
+    """
+
     def __init__(self, valid_fraction: float = 0.2, shuffle: bool = True):
         self.valid_fraction = valid_fraction
         self.shuffle = shuffle
 
-    def __call__(self, dataset: RayDataset, y=None, groups=None) -> Any:
+    def __call__(self, dataset: RayDataset, y=None,
+                 groups=None) -> Tuple[RayPipelineDataset, RayPipelineDataset]:
         X = dataset.X
         # Make sure to carry over the params
         params = dataset.get_params()
@@ -190,10 +285,63 @@ class FixedSplit:
 
 
 class PipelineIterator:
+    """An iterator for returing batches from a :class:`.RayPipelineDataset`,
+    similar to ``torch.utils.data.IterableDataset``.
+
+    Internally, this class uses a modified version of the
+    ``ray.data.Dataset.to_torch()`` method, with adjustments made to allow for
+    not changing the shape of the label tensor and for returning of
+    lists/dicts of feature tensors for multi-input modules. That method is,
+    in turn, called on the items yielded by
+    ``ray.data.Dataset.iter_epochs()``.
+
+    Parameters
+    ----------
+    skorch_dataset : RayPipelineDataset
+      The dataset to iterate over.
+
+    batch_size : int
+      How many samples per batch to yield at a time.
+
+    feature_columns : list of names or list/dict of the former (default=None)
+        The names of the columns to use as the features. If None, then use
+        all columns except the label columns as the features. If a list/dict
+        of lists is passed, the features will be split into multiple
+        tensors to work with multi-input modules.
+
+    label_column_dtype : torch.dtype (default=None)
+        The torch dtype to use for the label column. If None, then
+        automatically infer the dtype.
+
+    feature_column_dtypes : list of torch.dtype or list/dict of the former (default=None)
+        dtypes to use for the feature columns. The len(s) of this list must
+        be equal to the len(s) of ``feature_columns``. If None,
+        then automatically infer the dtype.
+
+    prefetch_blocks : int (default=0)
+        The number of blocks to prefetch ahead of the current block
+        during the scan.
+
+    drop_last : bool (default=False)
+        Set to True to drop the last incomplete batch,
+        if the dataset size is not divisible by the batch size. If
+        False and the size of dataset is not divisible by the batch
+        size, then the last batch will be smaller.
+
+    unsqueeze_label_tensor : bool (default=True)
+        Whether the label tensor should be unsqueezed (reshaped to [n, 1])
+        or not. In general regression loss functions such as ``MSELoss``
+        require the tensor to be unsqueezed, and classification metrics
+        such as ``CrossEntropyLoss`` require it to be 1D - for those, this
+        argument should be set to False.
+
+    """
+
     def __init__(
             self,
             skorch_dataset: RayPipelineDataset,
             batch_size: int,
+            *,
             feature_columns: Optional[Union[List[str], Dict[str, List[str]],
                                             List[List[str]]]] = None,
             label_column_dtype: Optional["torch.dtype"] = None,
@@ -201,7 +349,7 @@ class PipelineIterator:
                 str, List["torch.dtype"]], List[List["torch.dtype"]]]] = None,
             prefetch_blocks: int = 0,
             drop_last: bool = False,
-            unsqueeze_label_column: bool = True) -> None:
+            unsqueeze_label_tensor: bool = True) -> None:
         self._validate_feature_columns(skorch_dataset, feature_columns,
                                        feature_column_dtypes)
         self.skorch_dataset = skorch_dataset
@@ -211,8 +359,7 @@ class PipelineIterator:
         self.feature_column_dtypes = feature_column_dtypes
         self.prefetch_blocks = prefetch_blocks
         self.drop_last = drop_last
-        self.unsqueeze_label_column = unsqueeze_label_column
-        self._next_iter = None
+        self.unsqueeze_label_tensor = unsqueeze_label_tensor
         self._iterator = skorch_dataset.X.iter_epochs()
 
     def _validate_feature_columns(
@@ -237,7 +384,7 @@ class PipelineIterator:
             batch_size: int = 1,
             prefetch_blocks: int = 0,
             drop_last: bool = False,
-            unsqueeze_label_column: bool = False):
+            unsqueeze_label_tensor: bool = False):
         """Copy of Dataset.to_torch with support for returning dicts/lists."""
         from ray.data.impl.torch_iterable_dataset import \
             TorchIterableDataset
@@ -277,7 +424,7 @@ class PipelineIterator:
                 label_vals = batch.pop(label_column).values
                 label_tensor = torch.as_tensor(
                     label_vals, dtype=label_column_dtype)
-                if unsqueeze_label_column:
+                if unsqueeze_label_tensor:
                     label_tensor = label_tensor.view(-1, 1)
 
                 feature_columns_not_none = (
@@ -334,7 +481,8 @@ class PipelineIterator:
 
         return TorchIterableDataset(make_generator)
 
-    def __iter__(self):
+    def __iter__(self) -> Tuple[Union["torch.Tensor", List[
+            "torch.Tensor"], Dict[str, "torch.Tensor"]], "torch.Tensor"]:
         yield from self.to_torch(
             next(self._iterator),
             label_column=self.skorch_dataset.y,
@@ -344,4 +492,4 @@ class PipelineIterator:
             feature_column_dtypes=self.feature_column_dtypes,
             prefetch_blocks=self.prefetch_blocks,
             drop_last=self.drop_last,
-            unsqueeze_label_column=self.unsqueeze_label_column)
+            unsqueeze_label_tensor=self.unsqueeze_label_tensor)
