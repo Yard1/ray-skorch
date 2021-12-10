@@ -23,7 +23,7 @@ from ray.util.ml_utils.json import SafeFallbackEncoder
 from torch import nn
 from xgboost_ray import RayDMatrix, RayParams
 
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import accuracy_score
 
 from ray_sklearn.models.tabnet import TabNet
 
@@ -159,21 +159,31 @@ if __name__ == "__main__":
     lr = args.lr
     debug = args.debug
 
-    target = "fare_amount"
-    features = [
-        "pickup_longitude", "pickup_latitude", "dropoff_longitude",
-        "dropoff_latitude", "passenger_count"
-    ]
+    target = "CLASS"
 
     ray.init(address=address)
 
 
     data_path = os.path.expanduser("~/data/poker.csv")
+    dataset = ray.data.read_csv(data_path)
+    dataset = dataset.limit(2048)
 
     print(dataset)
     print("dataset loaded")
 
-    dtypes = [torch.float] * len(features)
+
+    def preprocess(df):
+        df = df - 1
+        df[target] = df[target] + 1
+        return df
+
+    dataset = dataset.map_batches(preprocess, batch_format="pandas")
+
+
+    print(dataset)
+    print("dataset transformed")
+
+    # dtypes = [torch.int32] * len(features)
 
     if shuffle:
         dataset = dataset.random_shuffle()
@@ -208,6 +218,9 @@ if __name__ == "__main__":
         print(f"Using global batch size: {batch_size}. "
               f"For {num_workers} workers the per worker batch size is {train_worker_batch_size}.")
 
+    tabnet_params = {"input_dim": 10, "output_dim": 10, "cat_idxs":list(range(10)), "cat_dims":[4,13] * 5}
+    print(f"tabnet_params: {tabnet_params}")
+
 
     def train_func(config):
         print(datasets)
@@ -218,10 +231,10 @@ if __name__ == "__main__":
         train_dataset_iterator = train_dataset_pipeline.iter_epochs()
         validation_dataset_iterator = validation_dataset_pipeline.iter_epochs()
 
-        model = TabNet(input_dim=len(features), output_dim=1)
+        model = TabNet(**tabnet_params)
         model = train.torch.prepare_model(model, ddp_kwargs={
             "find_unused_parameters": True})
-        criterion = nn.MSELoss()
+        criterion = nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.7, patience=10, threshold=1e-5)
@@ -233,9 +246,9 @@ if __name__ == "__main__":
             train_dataset = next(train_dataset_iterator)
             validation_dataset = next(validation_dataset_iterator)
             train_torch_dataset = train_dataset.to_torch(
-                label_column=target, label_column_dtype=torch.float, feature_columns=features, feature_column_dtypes=dtypes, batch_size=train_worker_batch_size)
+                label_column=target,  batch_size=train_worker_batch_size)
             validation_torch_dataset = validation_dataset.to_torch(
-                label_column=target, label_column_dtype=torch.float, feature_columns=features, feature_column_dtypes=dtypes, batch_size=train_worker_batch_size)
+                label_column=target,  batch_size=train_worker_batch_size)
 
             last_time = time.time()
 
@@ -253,12 +266,18 @@ if __name__ == "__main__":
 
                 X = X.to(device)
                 y = y.to(device)
+                y = y.squeeze(1)
+
                 pred = model(X)
+                #
+                # print(f"y:{y}")
+                # print(f"pred:{pred}")
+
                 loss = criterion(pred, y)
                 optimizer.zero_grad()
                 loss.backward()
 
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 optimizer.step()
 
                 count = len(X)
@@ -266,7 +285,7 @@ if __name__ == "__main__":
                 train_num_rows += count
 
             train_loss = train_train_loss / train_num_rows  # TODO: should this be num batches or num rows?
-            print(f"Train epoch: [{i}], mean square error:[{train_loss}]")
+            print(f"Train epoch: [{i}], cross entropy loss:[{train_loss}]")
 
             last_time = time.time()
 
@@ -282,24 +301,25 @@ if __name__ == "__main__":
                         print(f"Validation epoch: [{i}], batch[{batch_idx}], time[{time_since_last}]")
                     X = X.to(device)
                     y = y.to(device)
+                    y = y.squeeze(1)
                     count = len(X)
                     pred = model(X)
                     val_total_loss += count * criterion(pred, y).item()
                     val_num_rows += count
             val_loss = val_total_loss / val_num_rows  # TODO: should this be num batches or num rows?
-            print(f"Validation epoch: [{i}], mean square error:[{val_loss}]")
+            print(f"Validation epoch: [{i}], cross entropy loss:[{val_loss}]")
 
-            scheduler.step(train_loss)
+            scheduler.step(val_loss)
             curr_lr = [ group['lr'] for group in optimizer.param_groups ]
 
-            train.report(train_mse=train_loss, val_mse=val_loss, lr=curr_lr)
+            train.report(train_cel=train_loss, val_cel=val_loss, lr=curr_lr)
 
 
             state_dict = model.state_dict()
             from torch.nn.modules.utils import \
                 consume_prefix_in_state_dict_if_present
             consume_prefix_in_state_dict_if_present(state_dict, "module.")
-            train.save_checkpoint(val_mse=val_loss, model_state_dict=state_dict)
+            train.save_checkpoint(val_cel=val_loss, model_state_dict=state_dict)
             results.append(val_loss)
 
         return results
@@ -309,7 +329,7 @@ if __name__ == "__main__":
 
     test_df = test_dataset.to_pandas()
 
-    X_test = test_df[features]
+    X_test = test_df.drop(target, axis=1)
     y_true = test_df[target]
 
 
@@ -323,8 +343,9 @@ if __name__ == "__main__":
     # Set XGBoost config.
     xgboost_params = {
         "tree_method": "approx",
-        "objective": "reg:squarederror",
-        "eval_metric": ["rmse"],
+        "objective": "multi:softmax",
+        "eval_metric": ["merror"],
+        "num_class": 10
     }
 
     train_start = time.time()
@@ -348,8 +369,8 @@ if __name__ == "__main__":
     test_set = RayDMatrix(test_dataset, target)
     pred = xgboost_ray.predict(bst, test_set, ray_params=ray_params)
 
-    xgb_loss = mean_squared_error(y_true, pred)
-    print(f"xgboost test loss: {xgb_loss}")
+    xgb_acc = accuracy_score(y_true, pred)
+    print(f"xgboost test acc: {xgb_acc}")
 
     # import sys
     # sys.exit()
@@ -373,7 +394,7 @@ if __name__ == "__main__":
 
     trainer = Trainer("torch", num_workers=num_workers, use_gpu=use_gpu)
     trainer.start()
-    results = trainer.run(train_func, dataset=datasets, callbacks=[AggregateLogCallback()], checkpoint_strategy=CheckpointStrategy(checkpoint_score_attribute="val_mse", checkpoint_score_order="min"))
+    results = trainer.run(train_func, dataset=datasets, callbacks=[AggregateLogCallback()], checkpoint_strategy=CheckpointStrategy(checkpoint_score_attribute="val_cel", checkpoint_score_order="min"))
     trainer.shutdown()
 
 
@@ -390,21 +411,32 @@ if __name__ == "__main__":
 
     # state_dict = trainer.latest_checkpoint["model_state_dict"]
     state_dict = best_checkpoint["model_state_dict"]
-    model = TabNet(input_dim=len(features), output_dim=1)
+    model = TabNet(**tabnet_params)
     model.load_state_dict(state_dict)
 
     X_test_tensor = torch.Tensor(X_test.values)
 
-    y_test = model(X_test_tensor).detach().numpy()
-    tabnet_loss = mean_squared_error(y_true, y_test)
+
+    # softmax = nn.Softmax()
+    pred = model(X_test_tensor)
+    y_test = pred.detach().numpy()
+    y_test = np.argmax(y_test, axis=1)
+
+
+    print(f"y_true:{y_true}")
+    print(f"y_test:{y_test}")
+
+
+
+    tabnet_acc = accuracy_score(y_true, y_test)
 
 
     print("Done!")
     print(results)
 
     print("\n========================")
-    print(f"tabnet test loss: {tabnet_loss}")
-    print(f"xgboost test loss: {xgb_loss}")
+    print(f"tabnet test acc: {tabnet_acc}")
+    print(f"xgboost test acc: {xgb_acc}")
     print("========================")
 
 
