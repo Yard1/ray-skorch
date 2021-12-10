@@ -61,9 +61,6 @@ if __name__ == "__main__":
         device=device,
         module__input_dim=num_columns,
         module__output_dim=1,
-        #train_split=None,
-        # Shuffle training data on each epoch
-        #iterator_train__shuffle=True,
     )
     reg.fit(dataset, y.name)
     print("Single input example done!")
@@ -84,9 +81,6 @@ if __name__ == "__main__":
         module__output_dim=1,
         iterator_train__feature_columns=[columns, ["extra_column"]],
         iterator_valid__feature_columns=[columns, ["extra_column"]],
-        #train_split=None,
-        # Shuffle training data on each epoch
-        #iterator_train__shuffle=True,
     )
     reg.fit(dataset, y.name)
     print("Multi input example with list done!")
@@ -108,9 +102,6 @@ if __name__ == "__main__":
             "X": columns,
             "X_other": ["extra_column"]
         },
-        #train_split=None,
-        # Shuffle training data on each epoch
-        #iterator_train__shuffle=True,
     )
     reg.fit(dataset, y.name)
     print("Multi input example with dict done!")

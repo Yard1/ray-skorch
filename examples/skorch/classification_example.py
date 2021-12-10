@@ -15,7 +15,11 @@ from ray_sklearn.skorch_approach.base import RayTrainNeuralNet
 
 def data_creator(rows, cols, n_classes=2):
     X_regr, y_regr = make_classification(
-        rows, cols, n_informative=cols // 2, n_classes=n_classes, random_state=0)
+        rows,
+        cols,
+        n_informative=cols // 2,
+        n_classes=n_classes,
+        random_state=0)
     X_regr = X_regr.astype(np.float32)
     y_regr = y_regr.reshape(-1, 1)
     return (X_regr, y_regr)
@@ -99,11 +103,11 @@ if __name__ == "__main__":
         device=device,
         module__input_dim=num_columns,
         module__output_dim=2,
-        iterator_train__unsqueeze_label_column=False,
-        iterator_valid__unsqueeze_label_column=False,
-        #train_split=None,
-        # Shuffle training data on each epoch
-        #iterator_train__shuffle=True,
+        # the following two arguments are required
+        # to ensure that a 1-D tensor is passed to
+        # the loss function, preventing an exception
+        iterator_train__unsqueeze_label_tensor=False,
+        iterator_valid__unsqueeze_label_tensor=False,
     )
     reg.fit(X, y)
     print("Single input binary example done!")
@@ -118,11 +122,11 @@ if __name__ == "__main__":
         device=device,
         module__input_dim=num_columns,
         module__output_dim=2,
-        iterator_train__unsqueeze_label_column=False,
-        iterator_valid__unsqueeze_label_column=False,
-        #train_split=None,
-        # Shuffle training data on each epoch
-        #iterator_train__shuffle=True,
+        # the following two arguments are required
+        # to ensure that a 1-D tensor is passed to
+        # the loss function, preventing an exception
+        iterator_train__unsqueeze_label_tensor=False,
+        iterator_valid__unsqueeze_label_tensor=False,
     )
     reg.fit([X, X.copy()], y)
     print("Multi input binary example with list done!")
@@ -136,11 +140,11 @@ if __name__ == "__main__":
         device=device,
         module__input_dim=num_columns,
         module__output_dim=2,
-        iterator_train__unsqueeze_label_column=False,
-        iterator_valid__unsqueeze_label_column=False,
-        #train_split=None,
-        # Shuffle training data on each epoch
-        #iterator_train__shuffle=True,
+        # the following two arguments are required
+        # to ensure that a 1-D tensor is passed to
+        # the loss function, preventing an exception
+        iterator_train__unsqueeze_label_tensor=False,
+        iterator_valid__unsqueeze_label_tensor=False,
     )
     reg.fit({"X": X, "X_other": X.copy()}, y)
     print("Multi input binary example with dict done!")
@@ -163,11 +167,11 @@ if __name__ == "__main__":
         device=device,
         module__input_dim=num_columns,
         module__output_dim=10,
-        iterator_train__unsqueeze_label_column=False,
-        iterator_valid__unsqueeze_label_column=False,
-        #train_split=None,
-        # Shuffle training data on each epoch
-        #iterator_train__shuffle=True,
+        # the following two arguments are required
+        # to ensure that a 1-D tensor is passed to
+        # the loss function, preventing an exception
+        iterator_train__unsqueeze_label_tensor=False,
+        iterator_valid__unsqueeze_label_tensor=False,
     )
     reg.fit(X, y)
     print("Single input multilabel example done!")
@@ -182,11 +186,11 @@ if __name__ == "__main__":
         device=device,
         module__input_dim=num_columns,
         module__output_dim=10,
-        iterator_train__unsqueeze_label_column=False,
-        iterator_valid__unsqueeze_label_column=False,
-        #train_split=None,
-        # Shuffle training data on each epoch
-        #iterator_train__shuffle=True,
+        # the following two arguments are required
+        # to ensure that a 1-D tensor is passed to
+        # the loss function, preventing an exception
+        iterator_train__unsqueeze_label_tensor=False,
+        iterator_valid__unsqueeze_label_tensor=False,
     )
     reg.fit([X, X.copy()], y)
     print("Multi input multilabel example with list done!")
@@ -200,11 +204,11 @@ if __name__ == "__main__":
         device=device,
         module__input_dim=num_columns,
         module__output_dim=10,
-        iterator_train__unsqueeze_label_column=False,
-        iterator_valid__unsqueeze_label_column=False,
-        #train_split=None,
-        # Shuffle training data on each epoch
-        #iterator_train__shuffle=True,
+        # the following two arguments are required
+        # to ensure that a 1-D tensor is passed to
+        # the loss function, preventing an exception
+        iterator_train__unsqueeze_label_tensor=False,
+        iterator_valid__unsqueeze_label_tensor=False,
     )
     reg.fit({"X": X, "X_other": X.copy()}, y)
     print("Multi input multilabel example with dict done!")

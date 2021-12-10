@@ -68,11 +68,7 @@ if __name__ == "__main__":
         train_callbacks=[
             ("print",
              DetailedHistoryPrintCallback(keys_to_not_print={PROFILER_KEY}))
-        ]
-        #train_split=None,
-        # Shuffle training data on each epoch
-        #iterator_train__shuffle=True,
-    )
+        ])
     reg.fit(dataset, "target")
     print(reg.ray_train_history_)
 
