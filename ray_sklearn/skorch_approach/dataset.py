@@ -200,7 +200,8 @@ class PipelineIterator:
             feature_column_dtypes: Optional[Union[List["torch.dtype"], Dict[
                 str, List["torch.dtype"]], List[List["torch.dtype"]]]] = None,
             prefetch_blocks: int = 0,
-            drop_last: bool = False) -> None:
+            drop_last: bool = False,
+            unsqueeze_label_column: bool = True) -> None:
         self._validate_feature_columns(skorch_dataset, feature_columns,
                                        feature_column_dtypes)
         self.skorch_dataset = skorch_dataset
@@ -210,6 +211,7 @@ class PipelineIterator:
         self.feature_column_dtypes = feature_column_dtypes
         self.prefetch_blocks = prefetch_blocks
         self.drop_last = drop_last
+        self.unsqueeze_label_column = unsqueeze_label_column
         self._next_iter = None
         self._iterator = skorch_dataset.X.iter_epochs()
 
@@ -234,7 +236,8 @@ class PipelineIterator:
                 str, List["torch.dtype"]], List[List["torch.dtype"]]]] = None,
             batch_size: int = 1,
             prefetch_blocks: int = 0,
-            drop_last: bool = False):
+            drop_last: bool = False,
+            unsqueeze_label_column: bool = False):
         """Copy of Dataset.to_torch with support for returning dicts/lists."""
         from ray.data.impl.torch_iterable_dataset import \
             TorchIterableDataset
@@ -272,9 +275,12 @@ class PipelineIterator:
                     prefetch_blocks=prefetch_blocks,
                     drop_last=drop_last):
                 label_vals = batch.pop(label_column).values
+                print(label_vals)
                 label_tensor = torch.as_tensor(
                     label_vals, dtype=label_column_dtype)
-                label_tensor = label_tensor.view(-1, 1)
+                print(label_tensor)
+                if unsqueeze_label_column:
+                    label_tensor = label_tensor.view(-1, 1)
 
                 feature_columns_not_none = (
                     feature_columns
@@ -339,4 +345,5 @@ class PipelineIterator:
             label_column_dtype=self.label_column_dtype,
             feature_column_dtypes=self.feature_column_dtypes,
             prefetch_blocks=self.prefetch_blocks,
-            drop_last=self.drop_last)
+            drop_last=self.drop_last,
+            unsqueeze_label_column=self.unsqueeze_label_column)
