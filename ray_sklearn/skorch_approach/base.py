@@ -66,6 +66,8 @@ class ray_trainer_start_shutdown(AbstractContextManager):
 
 
 class _WorkerRayTrainNeuralNet(NeuralNet):
+    # Docstring modified through set_worker_neural_net_docs
+
     def __init__(self,
                  module,
                  criterion,
@@ -368,6 +370,8 @@ set_worker_neural_net_docs(_WorkerRayTrainNeuralNet)
 
 
 class RayTrainNeuralNet(NeuralNet):
+    # Docstring modified through set_ray_train_neural_net_docs
+
     prefixes_ = NeuralNet.prefixes_ + [
         "worker_dataset", "trainer", "train_callbacks"
     ]
@@ -486,7 +490,12 @@ class RayTrainNeuralNet(NeuralNet):
         }
         return {k: v for k, v in ret.items() if k in (only_keys or ret.keys())}
 
-    def _get_worker_estimator(self) -> _WorkerRayTrainNeuralNet:
+    def _create_worker_estimator(self) -> _WorkerRayTrainNeuralNet:
+        """Create the worker estimator.
+        
+        This clones self, but removes all attributes that are not set
+        in ``_WorkerRayTrainNeuralNet.__init__``, and then changes the
+        base of the cloned object to ``_WorkerRayTrainNeuralNet``."""
         est = clone(self)
         worker_attributes = set(
             inspect.signature(_WorkerRayTrainNeuralNet.__init__).parameters)
@@ -516,10 +525,13 @@ class RayTrainNeuralNet(NeuralNet):
     def get_train_callbacks(self) -> List[Tuple[str, TrainingCallback]]:
         # TODO guard against duplicate keys
         # TODO do what initialize_callbacks does
+        train_callbacks = self.train_callbacks or []
+        if isinstance(self.train_callbacks, dict):
+            train_callbacks = list(train_callbacks.items())
         self.train_callbacks_ = [
             callback
             if isinstance(callback, tuple) else (callback.__name__, callback)
-            for callback in (self.train_callbacks or [])
+            for callback in train_callbacks
         ]
         default_callbacks = self.get_default_train_callbacks()
         for name, callback in default_callbacks:
@@ -535,7 +547,10 @@ class RayTrainNeuralNet(NeuralNet):
             checkpoint=None,
             **fit_params):
         if self.warm_start:
-            raise NotImplementedError("warm start is not yet supported")
+            raise NotImplementedError(
+                "`warm_start` parameter is not yet supported. If you want to "
+                "resume training, pass a train-sklearn checkpoint as "
+                "`checkpoint`.")
 
         if not self.warm_start or not self.initialized_:
             self.initialize()
@@ -594,7 +609,7 @@ class RayTrainNeuralNet(NeuralNet):
 
         assert dataset_train.y == dataset_valid.y  # TODO improve
 
-        est = self._get_worker_estimator()
+        est = self._create_worker_estimator()
         show_progress_bars = ray.data.impl.progress_bar._enabled
 
         def train_func(config):
