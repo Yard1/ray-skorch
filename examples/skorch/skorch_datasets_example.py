@@ -60,9 +60,6 @@ if __name__ == "__main__":
         device=device,
         module__input_dim=num_columns,
         module__output_dim=1,
-        #train_split=None,
-        # Shuffle training data on each epoch
-        #iterator_train__shuffle=True,
     )
     reg.fit(dataset, "target")
     #print(reg.predict(X))
