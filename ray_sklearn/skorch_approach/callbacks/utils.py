@@ -11,6 +11,10 @@ class SortedKeysMixin:
           * 'dur_s' is put last;
           * keys that start with 'event_' are put just before 'dur_s';
           * all remaining keys are sorted alphabetically.
+
+        This is a copy of a skorch method, modified to replace
+        'dur' with 'dur_s' and to allow for toggling whether
+        '*_best' or 'event_*' keys should be filtered.
         """
         sorted_keys = []
         keys_ignored = keys_ignored or {}

@@ -441,8 +441,6 @@ class TrainReportCallback(SortedKeysMixin, TrainSklearnCallback):
         self.keys_ignored = keys_ignored
 
     def initialize(self):
-        if not is_in_train_session():
-            return
         self.first_iteration_ = True
 
         keys_ignored = self.keys_ignored
@@ -453,8 +451,6 @@ class TrainReportCallback(SortedKeysMixin, TrainSklearnCallback):
         return self
 
     def on_epoch_end(self, net, **kwargs):
-        if not is_in_train_session():
-            return
         history = net.history[-1]
         train.report(
             **{
