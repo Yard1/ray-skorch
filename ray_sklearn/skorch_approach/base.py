@@ -602,6 +602,8 @@ class RayTrainNeuralNet(NeuralNet):
             if train.world_rank() == 0:
                 est.set_params(device=original_device)
                 output = self._get_params_io()
+                # get the module from inside DistributedDataParallel
+                est.module_ = est.module_.module
                 est.save_params(**output)
                 output = {k: v.getvalue() for k, v in output.items()}
             else:
