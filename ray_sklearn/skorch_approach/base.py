@@ -158,11 +158,6 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
 
     def initialize_callbacks(self):
         super().initialize_callbacks()
-        #if train.world_rank() != 0:
-        #    self.callbacks_ = [
-        #        callback_tuple for callback_tuple in self.callbacks_
-        #        if getattr(callback_tuple[0], "_on_all_ranks", False)
-        #    ]
         if self.profile:
             performance_callback = PerformanceLogger()
             if add_callback_if_not_already_in("ray_performance_logger",

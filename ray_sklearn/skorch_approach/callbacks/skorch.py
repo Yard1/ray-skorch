@@ -359,8 +359,6 @@ class TrainReportCallback(SortedKeysMixin, TrainSklearnCallback):
         self.keys_ignored = keys_ignored
 
     def initialize(self):
-        if not is_in_train_session():
-            return
         self.first_iteration_ = True
 
         keys_ignored = self.keys_ignored
@@ -371,13 +369,10 @@ class TrainReportCallback(SortedKeysMixin, TrainSklearnCallback):
         return self
 
     def on_epoch_end(self, net, **kwargs):
-        if not is_in_train_session():
-            return
-        history = net.history
-        hist = history[-1]
+        history = net.history[-1]
         train.report(
             **{
                 k: v
-                for k, v in hist.items() if k in self._sorted_keys(
-                    hist.keys(), self.keys_ignored_, filter_keys=False)
+                for k, v in history.items() if k in self._sorted_keys(
+                    history.keys(), self.keys_ignored_, filter_keys=False)
             })
