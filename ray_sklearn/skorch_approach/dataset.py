@@ -94,7 +94,7 @@ class RayDataset(SkorchDataset):
     def _init_dataset(self, X: Dataset, y: str):
         if not isinstance(X, Dataset):
             raise TypeError(f"X must be a Ray Dataset, got {type(X)}")
-        if not isinstance(y, str):
+        if y and not isinstance(y, str):
             raise TypeError(
                 f"If X is a Ray Dataset, y must be a string, got {type(y)}")
         self.X, self.y = self.convert(X, y)
@@ -274,11 +274,14 @@ class PipelineIterator:
                     batch_format="pandas",
                     prefetch_blocks=prefetch_blocks,
                     drop_last=drop_last):
-                label_vals = batch.pop(label_column).values
-                label_tensor = torch.as_tensor(
-                    label_vals, dtype=label_column_dtype)
-                if unsqueeze_label_column:
-                    label_tensor = label_tensor.view(-1, 1)
+                if label_column:
+                    label_vals = batch.pop(label_column).values
+                    label_tensor = torch.as_tensor(
+                        label_vals, dtype=label_column_dtype)
+                    if unsqueeze_label_column:
+                        label_tensor = label_tensor.view(-1, 1)
+                else:
+                    label_tensor = None
 
                 feature_columns_not_none = (
                     feature_columns
