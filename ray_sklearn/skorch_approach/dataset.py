@@ -64,8 +64,11 @@ class RayDataset(SkorchDataset):
     X : see above
       Everything pertaining to the input data.
 
-    y : see above or None (default=None)
-      Everything pertaining to the target, if there is anything.
+    y : string or numpy array or pandas Series (default=None)
+      If ``X`` is a ``ray.data`` object, this should be a string
+      pertaining to the name of the label column inside ``X``.
+      Otherwise, this should be a numpy array or pandas Series
+      with the label data.
 
     length : int or None (default=None)
       Unused, left for compatibility.
