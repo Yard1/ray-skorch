@@ -195,6 +195,7 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
             self.callbacks_.append(report_callback)
         return self
 
+    # TODO make this a callback
     def wrap_module_in_ddp(self):
         if not isinstance(self.module_, DistributedDataParallel):
             ddp_kwargs = self.ddp_kwargs or {}
@@ -270,8 +271,8 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
         if not self.initialized_:
             self.initialize()
 
-        self.wrap_module_in_ddp()
         self.notify('on_train_begin', X=X, y=y)
+        self.wrap_module_in_ddp()
         try:
             self.fit_loop(X, y, X_val=X_val, y_val=y_val, **fit_params)
         except KeyboardInterrupt:
@@ -419,6 +420,12 @@ class RayTrainNeuralNet(NeuralNet):
             verbose=verbose,
             device=device,
             **kwargs)
+
+    @property
+    def latest_checkpoint_(self):
+        """Same as ``self.trainer_.latest_checkpoint``."""
+        self.check_is_fitted(["trainer_"])
+        return self.trainer_.latest_checkpoint
 
     def initialize(self, initialize_ray=True):
         self._initialize_virtual_params()
