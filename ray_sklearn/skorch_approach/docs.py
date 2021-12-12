@@ -24,6 +24,17 @@ _docstring_neural_net_ray_trainer = """    trainer : ray.train.Trainer (class or
 
 """
 
+_docstring_neural_net_ray_trainer = """    trainer : ray.train.Trainer (class or instance) (default=ray.train.Trainer)
+      The Ray Train Trainer to use. If a class is passed, it will be instantiated internally.
+
+"""
+
+_docstring_neural_net_ray_ray_train_history = """    ray_train_history_ : dict
+      Histories from all Ray Train workers, keyed by rank. Will be None
+      if no Ray Train callback was an instance of ``HistoryLoggingCallback``.
+
+"""
+
 _docstring_neural_net_ray_kwargs = """    profile : bool (default=False)
       Whether to enable PyTorch Profiler and callbacks necessary
       for reporting.
@@ -100,6 +111,9 @@ def set_ray_train_neural_net_docs(ray_train_neural_net_class):
     ray_train_neural_net_class.__doc__ = insert_before_substring(
         ray_train_neural_net_class.__doc__, _docstring_neural_net_ray_kwargs,
         "    Attributes")
+    ray_train_neural_net_class.__doc__ = insert_before_substring(
+        ray_train_neural_net_class.__doc__, _docstring_neural_net_ray_ray_train_history,
+        "    _modules : list of str")
 
     ray_train_neural_net_class.fit.__doc__ = NeuralNet.fit.__doc__.replace(
         " (unless ``warm_start`` is True).", "").replace(
