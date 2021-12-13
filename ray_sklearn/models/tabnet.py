@@ -1,4 +1,4 @@
-# Copied from https://github.com/dreamquark-ai/tabnet/blob/b6e1ebaf694f37ad40a6ba525aa016fd3cec15da/pytorch_tabnet/tab_network.py#L487
+"""Copied from https://github.com/dreamquark-ai/tabnet/blob/b6e1ebaf694f37ad40a6ba525aa016fd3cec15da/pytorch_tabnet/tab_network.py#L487"""  # noqa
 
 import torch
 from torch.nn import Linear, BatchNorm1d, ReLU
@@ -71,9 +71,11 @@ class TabNetEncoder(torch.nn.Module):
         n_a : int
             Dimension of the attention  layer (usually between 4 and 64)
         n_steps : int
-            Number of successive steps in the network (usually between 3 and 10)
+            Number of successive steps in the network (usually between
+            3 and 10)
         gamma : float
-            Float above 1, scaling factor for attention updates (usually between 1.0 to 2.0)
+            Float above 1, scaling factor for attention updates (usually
+            between 1.0 to 2.0)
         n_independent : int
             Number of independent GLU layer in each GLU block (default 2)
         n_shared : int
@@ -83,9 +85,11 @@ class TabNetEncoder(torch.nn.Module):
         virtual_batch_size : int
             Batch size for Ghost Batch Normalization
         momentum : float
-            Float value between 0 and 1 which will be used for momentum in all batch norm
+            Float value between 0 and 1 which will be used for momentum
+            in all batch norm
         mask_type : str
-            Either "sparsemax" or "entmax" : this is the masking function to use
+            Either "sparsemax" or "entmax" : this is the masking function
+            to use
         """
         super(TabNetEncoder, self).__init__()
         self.input_dim = input_dim
@@ -223,9 +227,11 @@ class TabNetDecoder(torch.nn.Module):
         n_d : int
             Dimension of the prediction  layer (usually between 4 and 64)
         n_steps : int
-            Number of successive steps in the network (usually between 3 and 10)
+            Number of successive steps in the network (usually between
+            3 and 10)
         gamma : float
-            Float above 1, scaling factor for attention updates (usually between 1.0 to 2.0)
+            Float above 1, scaling factor for attention updates (usually
+            between 1.0 to 2.0)
         n_independent : int
             Number of independent GLU layer in each GLU block (default 1)
         n_shared : int
@@ -233,7 +239,8 @@ class TabNetDecoder(torch.nn.Module):
         virtual_batch_size : int
             Batch size for Ghost Batch Normalization
         momentum : float
-            Float value between 0 and 1 which will be used for momentum in all batch norm
+            Float value between 0 and 1 which will be used for momentum in
+            all batch norm
         """
         super(TabNetDecoder, self).__init__()
         self.input_dim = input_dim
@@ -412,9 +419,11 @@ class TabNetNoEmbeddings(torch.nn.Module):
         n_a : int
             Dimension of the attention  layer (usually between 4 and 64)
         n_steps : int
-            Number of successive steps in the network (usually between 3 and 10)
+            Number of successive steps in the network (usually between
+            3 and 10)
         gamma : float
-            Float above 1, scaling factor for attention updates (usually between 1.0 to 2.0)
+            Float above 1, scaling factor for attention updates (usually
+            between 1.0 to 2.0)
         n_independent : int
             Number of independent GLU layer in each GLU block (default 2)
         n_shared : int
@@ -424,9 +433,11 @@ class TabNetNoEmbeddings(torch.nn.Module):
         virtual_batch_size : int
             Batch size for Ghost Batch Normalization
         momentum : float
-            Float value between 0 and 1 which will be used for momentum in all batch norm
+            Float value between 0 and 1 which will be used for momentum in
+            all batch norm
         mask_type : str
-            Either "sparsemax" or "entmax" : this is the masking function to use
+            Either "sparsemax" or "entmax" : this is the masking function
+            to use
         """
         super(TabNetNoEmbeddings, self).__init__()
         self.input_dim = input_dim
@@ -480,7 +491,7 @@ class TabNetNoEmbeddings(torch.nn.Module):
                 out.append(task_mapping(res))
         else:
             out = self.final_mapping(res)
-        return out #, M_loss
+        return out  # , M_loss
 
     def forward_masks(self, x):
         return self.encoder.forward_masks(x)
@@ -520,9 +531,11 @@ class TabNet(torch.nn.Module):
         n_a : int
             Dimension of the attention  layer (usually between 4 and 64)
         n_steps : int
-            Number of successive steps in the network (usually between 3 and 10)
+            Number of successive steps in the network (usually between
+            3 and 10)
         gamma : float
-            Float above 1, scaling factor for attention updates (usually between 1.0 to 2.0)
+            Float above 1, scaling factor for attention updates (usually
+            between 1.0 to 2.0)
         cat_idxs : list of int
             Index of each categorical column in the dataset
         cat_dims : list of int
@@ -540,9 +553,11 @@ class TabNet(torch.nn.Module):
         virtual_batch_size : int
             Batch size for Ghost Batch Normalization
         momentum : float
-            Float value between 0 and 1 which will be used for momentum in all batch norm
+            Float value between 0 and 1 which will be used for momentum in
+            all batch norm
         mask_type : str
-            Either "sparsemax" or "entmax" : this is the masking function to use
+            Either "sparsemax" or "entmax" : this is the masking function
+            to use
         """
         super(TabNet, self).__init__()
         self.cat_idxs = cat_idxs or []
@@ -614,9 +629,11 @@ class AttentiveTransformer(torch.nn.Module):
         virtual_batch_size : int
             Batch size for Ghost Batch Normalization
         momentum : float
-            Float value between 0 and 1 which will be used for momentum in batch norm
+            Float value between 0 and 1 which will be used for momentum in
+            batch norm
         mask_type : str
-            Either "sparsemax" or "entmax" : this is the masking function to use
+            Either "sparsemax" or "entmax" : this is the masking function
+            to use
         """
         super(AttentiveTransformer, self).__init__()
         self.fc = Linear(input_dim, output_dim, bias=False)
@@ -671,7 +688,8 @@ class FeatTransformer(torch.nn.Module):
         virtual_batch_size : int
             Batch size for Ghost Batch Normalization within GLU block(s)
         momentum : float
-            Float value between 0 and 1 which will be used for momentum in batch norm
+            Float value between 0 and 1 which will be used for momentum in
+            batch norm
         """
 
         params = {
@@ -746,7 +764,8 @@ class GLU_Block(torch.nn.Module):
 
     def forward(self, x):
         scale = torch.sqrt(torch.FloatTensor([0.5]).to(x.device))
-        if self.first:  # the first layer of the block has no scale multiplication
+        # the first layer of the block has no scale multiplication
+        if self.first:
             x = self.glu_layers[0](x)
             layers_left = range(1, self.n_glu)
         else:
@@ -806,7 +825,8 @@ class EmbeddingGenerator(torch.nn.Module):
             Positional index for each categorical features in inputs
         cat_emb_dim : int or list of int
             Embedding dimension for each categorical features
-            If int, the same embedding dimension will be used for all categorical features
+            If int, the same embedding dimension will be used for all
+            categorical features
         """
         super(EmbeddingGenerator, self).__init__()
         if cat_dims == [] and cat_idxs == []:
@@ -815,9 +835,11 @@ class EmbeddingGenerator(torch.nn.Module):
             return
         elif (cat_dims == []) ^ (cat_idxs == []):
             if cat_dims == []:
-                msg = "If cat_idxs is non-empty, cat_dims must be defined as a list of same length."
+                msg = ("If cat_idxs is non-empty, cat_dims must be defined "
+                       "as a list of same length.")
             else:
-                msg = "If cat_dims is non-empty, cat_idxs must be defined as a list of same length."
+                msg = ("If cat_dims is non-empty, cat_idxs must be defined "
+                       "as a list of same length.")
             raise ValueError(msg)
         elif len(cat_dims) != len(cat_idxs):
             msg = "The lists cat_dims and cat_idxs must have the same length."
@@ -831,8 +853,8 @@ class EmbeddingGenerator(torch.nn.Module):
 
         # check that all embeddings are provided
         if len(self.cat_emb_dims) != len(cat_dims):
-            msg = f"""cat_emb_dim and cat_dims must be lists of same length, got {len(self.cat_emb_dims)}
-                      and {len(cat_dims)}"""
+            msg = ("cat_emb_dim and cat_dims must be lists of same length, "
+                   f"got {len(self.cat_emb_dims)} and {len(cat_dims)}")
             raise ValueError(msg)
         self.post_embed_dim = int(input_dim + np.sum(self.cat_emb_dims) -
                                   len(self.cat_emb_dims))
