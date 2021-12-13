@@ -35,7 +35,8 @@ DEFAULT_AGGREGATE_FUNC = {
 
 DEFAULT_KEYS_TO_NOT_AGGREGATE = {
     "epoch", "_timestamp", "_training_iteration", "train_batch_size",
-    "valid_batch_size", PROFILER_KEY
+    "valid_batch_size", PROFILER_KEY, "valid_loss_best", "train_loss_best",
+    "train_batch_count", "valid_batch_count"
 }
 
 DEFAULT_KEYS_TO_NOT_PRINT = {PROFILER_KEY, "batches"}
@@ -201,6 +202,8 @@ class DetailedHistoryPrintCallback(SortedKeysMixin, AbstractPrintCallback):
         self._sink(print_dict)
 
 
+# TODO _best keys should be calculated from aggregate
+# and not taken from rank 0
 class TableHistoryPrintCallback(SortedKeysMixin, AbstractPrintCallback):
     def __init__(
             self,

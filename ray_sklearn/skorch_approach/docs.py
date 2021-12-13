@@ -29,8 +29,9 @@ _docstring_neural_net_ray_trainer = """    trainer : ray.train.Trainer (class or
 
 """
 
-_docstring_neural_net_ray_ray_train_history = """    ray_train_history_ : dict
-      Histories from all Ray Train workers, keyed by rank. Will be None
+_docstring_neural_net_ray_ray_train_history = """    ray_train_history_ : list of dicts
+      Histories from all Ray Train workers. A list of dicts. Each dict represents
+      another epoch in order, with keys being the rank of the worker. Will be None
       if no Ray Train callback was an instance of ``HistoryLoggingCallback``.
 
 """
