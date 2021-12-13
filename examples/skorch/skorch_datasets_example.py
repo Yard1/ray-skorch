@@ -1,10 +1,8 @@
 import argparse
 
-import numpy as np
 import pandas as pd
 
 from torch import nn
-from pprint import pprint
 
 import ray
 import ray.data
@@ -62,9 +60,5 @@ if __name__ == "__main__":
         module__output_dim=1,
     )
     reg.fit(dataset, "target")
-    #print(reg.predict(X))
 
-    #pprint(reg.history)
-    #pprint(reg.worker_histories_)
-    #pprint(reg.ray_train_history_)
     print("Done!")

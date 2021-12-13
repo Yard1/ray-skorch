@@ -8,7 +8,7 @@ from ray.data import from_pandas
 from ray_sklearn import RayTrainNeuralNet
 from ray_sklearn.models import TabNet
 
-from basic_example import data_creator, RegressorModule
+from basic_example import data_creator
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

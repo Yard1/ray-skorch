@@ -8,8 +8,8 @@ from skorch.utils import is_dataset
 import torch
 
 if TYPE_CHECKING:
-    from ray_sklearn.callbacks.skorch import TrainSklearnCallback
-    from ray.train.callbacks import TrainingCallback
+    from ray_sklearn.callbacks.skorch import TrainSklearnCallback  # noqa: F401
+    from ray.train.callbacks import TrainingCallback  # noqa: F401
 
 
 def is_in_train_session() -> bool:
@@ -38,7 +38,9 @@ def add_callback_if_not_already_in(
         callback_name: str,
         callback: Union["TrainSklearnCallback", "TrainingCallback"],
         callback_list: list) -> bool:
-    """Add a callback to the list if there isn't one with the same name or type."""
+    """Add a callback to the list if there isn't one with the same
+    name or type.
+    """
     if not any(name == callback_name or isinstance(callback, type(c))
                for name, c in callback_list):
         callback_list.append((callback_name, callback))

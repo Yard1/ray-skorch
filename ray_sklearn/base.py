@@ -2,7 +2,6 @@ from typing import (Any, Callable, Dict, List, Optional, OrderedDict, Set,
                     Tuple, Type, Union)
 from contextlib import AbstractContextManager
 import io
-import numpy as np
 import inspect
 import pandas as pd
 import collections
@@ -32,14 +31,13 @@ from ray_sklearn.callbacks.train import (
 from ray_sklearn.callbacks.skorch import (
     TrainSklearnCallback, TrainCheckpoint, TrainReportCallback,
     PerformanceLogger, EpochTimerS, PytorchProfilerLogger)
-from ray_sklearn.dataset import (
-    FixedSplit, PipelineIterator, RayPipelineDataset, dataset_factory)
+from ray_sklearn.dataset import (FixedSplit, PipelineIterator,
+                                 RayPipelineDataset, dataset_factory)
 from ray_sklearn.docs import (set_ray_train_neural_net_docs,
-                                              set_worker_neural_net_docs)
+                              set_worker_neural_net_docs)
 
 from ray_sklearn.utils import (add_callback_if_not_already_in,
-                                               is_in_train_session,
-                                               is_dataset_or_ray_dataset)
+                               is_in_train_session, is_dataset_or_ray_dataset)
 
 
 class ray_trainer_start_shutdown(AbstractContextManager):
@@ -80,10 +78,10 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
                  dataset=dataset_factory,
                  train_split=None,
                  callbacks=None,
-                 predict_nonlinearity='auto',
+                 predict_nonlinearity="auto",
                  warm_start=False,
                  verbose=1,
-                 device='cpu',
+                 device="cpu",
                  profile: bool = False,
                  save_checkpoints: bool = False,
                  ddp_kwargs: Optional[Dict[str, Any]] = None,
@@ -160,13 +158,13 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
     @property
     def _default_callbacks(self):
         return [
-            ('epoch_timer', EpochTimerS()),
-            ('train_loss',
+            ("epoch_timer", EpochTimerS()),
+            ("train_loss",
              PassthroughScoring(
-                 name='train_loss',
+                 name="train_loss",
                  on_train=True,
              )),
-            ('valid_loss', PassthroughScoring(name='valid_loss', )),
+            ("valid_loss", PassthroughScoring(name="valid_loss", )),
         ]
 
     def initialize_callbacks(self):
@@ -237,22 +235,22 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
         if training:
             initalized_iterator = self.iterator_train_
             if initalized_iterator is None:
-                kwargs = self.get_params_for('iterator_train')
+                kwargs = self.get_params_for("iterator_train")
                 iterator = self.iterator_train
         else:
             initalized_iterator = self.iterator_valid_
             if initalized_iterator is None:
-                kwargs = self.get_params_for('iterator_valid')
+                kwargs = self.get_params_for("iterator_valid")
                 iterator = self.iterator_valid
 
         if initalized_iterator is not None:
             return iter(initalized_iterator)
 
-        if 'batch_size' not in kwargs:
-            kwargs['batch_size'] = self.batch_size
+        if "batch_size" not in kwargs:
+            kwargs["batch_size"] = self.batch_size
 
-        if kwargs['batch_size'] == -1:
-            kwargs['batch_size'] = len(dataset)
+        if kwargs["batch_size"] == -1:
+            kwargs["batch_size"] = len(dataset)
 
         initalized_iterator = iterator(dataset, **kwargs)
 
@@ -280,13 +278,13 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
         if not self.initialized_:
             self.initialize()
 
-        self.notify('on_train_begin', X=X, y=y)
+        self.notify("on_train_begin", X=X, y=y)
         self.wrap_module_in_ddp()
         try:
             self.fit_loop(X, y, X_val=X_val, y_val=y_val, **fit_params)
         except KeyboardInterrupt:
             pass
-        self.notify('on_train_end', X=X, y=y)
+        self.notify("on_train_end", X=X, y=y)
         return self
 
     def fit_loop(self,
@@ -313,12 +311,12 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
         assert dataset_train.y == dataset_valid.y  # TODO improve
 
         on_epoch_kwargs = {
-            'dataset_train': dataset_train,
-            'dataset_valid': dataset_valid,
+            "dataset_train": dataset_train,
+            "dataset_valid": dataset_valid,
         }
 
         for _ in range(epochs):
-            self.notify('on_epoch_begin', **on_epoch_kwargs)
+            self.notify("on_epoch_begin", **on_epoch_kwargs)
 
             self.run_single_epoch(
                 dataset_train,
@@ -343,32 +341,32 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
         Xi, yi = unpack_data(batch)
         y_pred = self.infer(Xi, **fit_params)
         loss = self.get_loss(y_pred, yi, X=Xi, training=True)
-        self.notify('on_backward_pass_begin', X=Xi, y=yi)
+        self.notify("on_backward_pass_begin", X=Xi, y=yi)
         loss.backward()
-        self.notify('on_backward_pass_end', X=Xi, y=yi)
+        self.notify("on_backward_pass_end", X=Xi, y=yi)
         return {
-            'loss': loss,
-            'y_pred': y_pred,
+            "loss": loss,
+            "y_pred": y_pred,
         }
 
     def infer(self, x, **fit_params):
-        self.notify('on_X_to_device_begin', X=x)
+        self.notify("on_X_to_device_begin", X=x)
         x = to_tensor(x, device=self.device)
-        self.notify('on_X_to_device_end', X=x)
-        self.notify('on_forward_pass_begin', X=x)
+        self.notify("on_X_to_device_end", X=x)
+        self.notify("on_forward_pass_begin", X=x)
         if isinstance(x, dict):
             x_dict = self._merge_x_and_fit_params(x, fit_params)
             ret = self.module_(**x_dict)
         else:
             ret = self.module_(x, **fit_params)
-        self.notify('on_forward_pass_end', X=x)
+        self.notify("on_forward_pass_end", X=x)
         return ret
 
     # pylint: disable=unused-argument
     def get_loss(self, y_pred, y_true, X=None, training=False):
-        self.notify('on_y_to_device_begin', y=y_true)
+        self.notify("on_y_to_device_begin", y=y_true)
         y_true = to_tensor(y_true, device=self.device)
-        self.notify('on_y_to_device_end', y=y_true)
+        self.notify("on_y_to_device_end", y=y_true)
         return self.criterion_(y_pred, y_true)
 
     def predict_proba(self, X):
@@ -401,10 +399,10 @@ class RayTrainNeuralNet(NeuralNet):
                                   None] = None,
                  train_callbacks: Optional[List[Tuple[
                      str, TrainingCallback]]] = None,
-                 predict_nonlinearity='auto',
+                 predict_nonlinearity="auto",
                  warm_start=False,
                  verbose=1,
-                 device='cpu',
+                 device="cpu",
                  trainer: Union[Type[Trainer], Trainer] = Trainer,
                  profile: bool = False,
                  save_checkpoints: bool = False,
@@ -463,7 +461,7 @@ class RayTrainNeuralNet(NeuralNet):
 
     def _initialize_trainer(self):
         # this init context is for consistency and not being used at the moment
-        with self._current_init_context('trainer'):
+        with self._current_init_context("trainer"):
             if self.callbacks == "disable":
                 self.callbacks_ = []
                 return self
@@ -509,10 +507,11 @@ class RayTrainNeuralNet(NeuralNet):
 
     def _create_worker_estimator(self) -> _WorkerRayTrainNeuralNet:
         """Create the worker estimator.
-        
+
         This clones self, but removes all attributes that are not set
         in ``_WorkerRayTrainNeuralNet.__init__``, and then changes the
-        base of the cloned object to ``_WorkerRayTrainNeuralNet``."""
+        base of the cloned object to ``_WorkerRayTrainNeuralNet``.
+        """
         est = clone(self)
         worker_attributes = set(
             inspect.signature(_WorkerRayTrainNeuralNet.__init__).parameters)
@@ -662,7 +661,7 @@ class RayTrainNeuralNet(NeuralNet):
         if not self.initialized_:
             self.initialize()
 
-        self.notify('on_train_begin', X=X, y=y)
+        self.notify("on_train_begin", X=X, y=y)
         try:
             self.fit_loop(
                 X,
@@ -673,7 +672,7 @@ class RayTrainNeuralNet(NeuralNet):
                 **fit_params)
         except KeyboardInterrupt:
             pass
-        self.notify('on_train_end', X=X, y=y)
+        self.notify("on_train_end", X=X, y=y)
         return self
 
     def fit_loop(self,

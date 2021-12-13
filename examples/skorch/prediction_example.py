@@ -39,7 +39,7 @@ if __name__ == "__main__":
     X = pd.DataFrame(X)
     y = pd.Series(y.ravel())
     y.name = "target"
-    
+
     columns = list(X.columns)
     num_columns = X.shape[1]
 
@@ -62,7 +62,7 @@ if __name__ == "__main__":
     )
     reg.fit(dataset, "target")
     X_pred = reg.predict_proba(prediction_dataset)
-    
+
     print(X_pred)
     print(X_pred.to_pandas())
 

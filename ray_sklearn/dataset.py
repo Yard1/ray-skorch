@@ -4,10 +4,10 @@ import numpy as np
 import pandas as pd
 import torch
 
-from ray.data import Dataset, from_numpy, from_pandas
+from ray.data import Dataset, from_pandas
 from ray.data.dataset_pipeline import DatasetPipeline
 from skorch.dataset import Dataset as SkorchDataset
-from skorch.utils import check_indexing, is_dataset, is_pandas_ndframe
+from skorch.utils import check_indexing, is_pandas_ndframe
 
 LABEL_COLUMN = "_label"
 
@@ -163,7 +163,8 @@ class RayDataset(SkorchDataset):
 
 
 class RayPipelineDataset(RayDataset):
-    """Wrapper allowing for validation and conversion to ``ray.data.DatasetPipeline``.
+    """Wrapper allowing for validation and conversion to
+    ``ray.data.DatasetPipeline``.
 
     The dataset will always yield a tuple of two values, the first
     from the data (``X``) and the second from the target (``y``).
@@ -316,7 +317,8 @@ class PipelineIterator:
         The torch dtype to use for the label column. If None, then
         automatically infer the dtype.
 
-    feature_column_dtypes : list of torch.dtype or list/dict of the former (default=None)
+    feature_column_dtypes : list of torch.dtype or list/dict of the former
+    (default=None)
         dtypes to use for the feature columns. The len(s) of this list must
         be equal to the len(s) of ``feature_columns``. If None,
         then automatically infer the dtype.

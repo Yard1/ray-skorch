@@ -2,25 +2,23 @@ import time
 import os
 import io
 import pickle
-from queue import Queue
-from typing import Any, Callable, Dict, Iterable, Optional, Union, TYPE_CHECKING
+from typing import (Any, Callable, Dict, Iterable, Optional, Union,
+                    TYPE_CHECKING)
 from skorch.callbacks.training import Checkpoint
 
-from torch.profiler import profile, record_function, ProfilerActivity, schedule
+from torch.profiler import profile, record_function, ProfilerActivity
 
 from ray import train
 
 from skorch.callbacks import Callback, EpochTimer
-from skorch.callbacks.logging import filter_log_keys
 from skorch.utils import _check_f_arguments, noop
 
-from ray_sklearn.utils import (is_in_train_session,
-                                               is_using_gpu)
+from ray_sklearn.utils import is_using_gpu
 from ray_sklearn.callbacks.constants import PROFILER_KEY
 from ray_sklearn.callbacks.utils import SortedKeysMixin
 
 if TYPE_CHECKING:
-    from ray_sklearn.base import _WorkerRayTrainNeuralNet
+    from ray_sklearn.base import _WorkerRayTrainNeuralNet  # noqa: F401
 
 
 class TrainSklearnCallback(Callback):
@@ -60,7 +58,7 @@ class EpochTimerS(EpochTimer):
     """
 
     def on_epoch_end(self, net, **kwargs):
-        net.history.record('dur_s', time.time() - self.epoch_start_time_)
+        net.history.record("dur_s", time.time() - self.epoch_start_time_)
 
 
 class PerformanceLogger(TrainSklearnCallback):
@@ -103,9 +101,9 @@ class PerformanceLogger(TrainSklearnCallback):
 
     def on_batch_end(self, net, batch=None, training=None, **kwargs):
         net.history.record_batch(
-            'to_device_dur_s', self.X_to_device_time_ + self.y_to_device_time_)
-        net.history.record_batch('forward_pass_dur_s', self.forward_pass_time_)
-        net.history.record_batch('backward_pass_dur_s',
+            "to_device_dur_s", self.X_to_device_time_ + self.y_to_device_time_)
+        net.history.record_batch("forward_pass_dur_s", self.forward_pass_time_)
+        net.history.record_batch("backward_pass_dur_s",
                                  self.backward_pass_time_)
 
 
@@ -155,7 +153,7 @@ class PytorchProfilerLogger(TrainSklearnCallback):
     def on_train_begin(self, net, X=None, y=None, **kwargs):
         self.has_gpu_ = is_using_gpu(net.device)
         profiler_args = self.profiler_args or {}
-        self.profiler_args_ =  {**{
+        self.profiler_args_ = {**{
             "activities": [ProfilerActivity.CPU] + [ProfilerActivity.CUDA]
             if self.has_gpu_ else [],
             "with_stack": False,
@@ -377,20 +375,20 @@ class TrainCheckpoint(Checkpoint, TrainSklearnCallback):
                 continue
 
             f = self._get_io(f"f_{key}")
-            key = key[:-1]  # remove trailing '_'
+            key = key[:-1]  # remove trailing "_"
             params[f"f_{key}"] = self._save_params(f, net, f"f_{key}",
                                                    f"{key} state")
 
-        f_history = kwargs_other.get('f_history')
+        f_history = kwargs_other.get("f_history")
         if f_history:
             f = self.f_history_
             params["f_history"] = self._save_params(f, net, "f_history",
                                                     "history")
 
-        f_pickle = kwargs_other.get('f_pickle')
+        f_pickle = kwargs_other.get("f_pickle")
         if f_pickle:
             f_pickle = self._get_io("f_pickle")
-            with open(f_pickle, 'wb') as f:
+            with open(f_pickle, "wb") as f:
                 pickle.dump(net, f)
             params["f_pickle"] = f_pickle
 
@@ -453,7 +451,6 @@ class TrainReportCallback(SortedKeysMixin, TrainSklearnCallback):
         if isinstance(keys_ignored, str):
             keys_ignored = [keys_ignored]
         self.keys_ignored_ = set(keys_ignored or [])
-        #self.keys_ignored_.add("batches")
         return self
 
     def on_epoch_end(self, net, **kwargs):

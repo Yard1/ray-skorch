@@ -6,8 +6,6 @@ import numpy as np
 import numbers
 import sys
 
-from torch.profiler import profile, record_function, ProfilerActivity, schedule
-
 from numbers import Number
 from skorch.utils import Ansi
 from pprint import pprint
@@ -105,9 +103,8 @@ class HistoryLoggingCallback(TrainingCallback):
         if not all(
                 isinstance(worker, int) or worker == AGGREGATE_KEY
                 for worker in workers_to_log):
-            raise TypeError(
-                "All elements of workers_to_log must be integers or 'aggregate'."
-            )
+            raise TypeError("All elements of workers_to_log must be integers "
+                            "or 'aggregate'.")
         if len(workers_to_log) < 1:
             raise ValueError(
                 "At least one worker must be specified in workers_to_log.")
@@ -217,9 +214,9 @@ class TableHistoryPrintCallback(SortedKeysMixin, AbstractPrintCallback):
                 float]], float]] = DEFAULT_AGGREGATE_FUNC,
             aggregate_key_to_print: str = "mean",
             sink: Callable[[Any], None] = print,
-            tablefmt='simple',
-            floatfmt='.4f',
-            stralign='right',
+            tablefmt="simple",
+            floatfmt=".4f",
+            stralign="right",
     ) -> None:
         self.aggregate_key_to_print = aggregate_key_to_print
         self.tablefmt = tablefmt
@@ -252,12 +249,12 @@ class TableHistoryPrintCallback(SortedKeysMixin, AbstractPrintCallback):
         tabulated = self.table(data)
 
         if self.first_iteration_:
-            header, lines = tabulated.split('\n', 2)[:2]
+            header, lines = tabulated.split("\n", 2)[:2]
             self._sink(header)
             self._sink(lines)
             self.first_iteration_ = False
 
-        self._sink(tabulated.rsplit('\n', 1)[-1])
+        self._sink(tabulated.rsplit("\n", 1)[-1])
         if self.sink is print:
             sys.stdout.flush()
 
@@ -278,17 +275,17 @@ class TableHistoryPrintCallback(SortedKeysMixin, AbstractPrintCallback):
         value = row[key]
 
         if isinstance(value, bool) or value is None:
-            return '+' if value else ''
+            return "+" if value else ""
 
         if not isinstance(value, Number):
             return value
 
         # determine if integer value
         is_integer = float(value).is_integer()
-        template = '{}' if is_integer else '{:' + self.floatfmt + '}'
+        template = "{}" if is_integer else "{:" + self.floatfmt + "}"
 
-        # if numeric, there could be a 'best' key
-        key_best = key + '_best'
+        # if numeric, there could be a "best" key
+        key_best = key + "_best"
         if (key_best in row) and row[key_best]:
             template = color + template + Ansi.ENDC.value
         return template.format(value)
@@ -298,7 +295,7 @@ class TableHistoryPrintCallback(SortedKeysMixin, AbstractPrintCallback):
         for key, color in zip(
                 self._sorted_keys(row.keys(), self.keys_to_not_print), colors):
             formatted = self.format_row(row, key, color=color)
-            if key.startswith('event_'):
+            if key.startswith("event_"):
                 key = key[6:]
             yield key, formatted
 

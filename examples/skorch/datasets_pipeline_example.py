@@ -79,7 +79,6 @@ if __name__ == "__main__":
     )
     reg.fit(
         train_dataset_pipeline, "target", X_val=validation_dataset_pipeline)
-    #print(reg.predict(X))
 
     print("Running multi input example")
 
