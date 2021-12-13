@@ -22,6 +22,7 @@ from skorch.history import History
 from skorch.utils import to_tensor
 
 import torch
+from torch.nn.parallel.distributed import DistributedDataParallel
 
 from sklearn.base import clone
 
@@ -701,7 +702,7 @@ class RayTrainNeuralNet(NeuralNet):
             assert dataset_train.y == dataset_valid.y  # TODO improve
             dataset["dataset_valid"] = dataset_valid.X
 
-        worker_estimator = self._get_worker_estimator()
+        worker_estimator = self._create_worker_estimator()
         train_func = self._create_train_function()
 
         show_progress_bars = ray.data.impl.progress_bar._enabled
@@ -748,7 +749,7 @@ class RayTrainNeuralNet(NeuralNet):
         dataset = self.get_dataset(X, None)
         dataset = RayPipelineDataset(
             X, y=None, random_shuffle_each_window=False)
-        worker_estimator = self._get_worker_estimator()
+        worker_estimator = self._create_worker_estimator()
 
         prediction_func = self._create_prediction_function()
 
