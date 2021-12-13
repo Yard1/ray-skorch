@@ -567,7 +567,8 @@ class RayTrainNeuralNet(NeuralNet):
                 estimator.set_params(device=original_device)
                 output = self._get_params_io()
                 # get the module from inside DistributedDataParallel
-                estimator.module_ = estimator.module_.module
+                if isinstance(estimator.module_, DistributedDataParallel):
+                    estimator.module_ = estimator.module_.module
                 estimator.save_params(**output)
                 output = {k: v.getvalue() for k, v in output.items()}
             else:
@@ -659,20 +660,20 @@ class RayTrainNeuralNet(NeuralNet):
         dataset: Dict[str, Dataset] = {}
 
         if X_val is None:
-            dataset_train, dataset_valid = self.get_split_datasets(
+            ray_dataset_train, ray_dataset_valid = self.get_split_datasets(
                 X, y, **fit_params)
         else:
             self.check_data(X_val, y_val)
             if is_dataset_or_ray_dataset(X_val) and y_val is None:
                 y_val = y
-            dataset_train = self.get_dataset(X, y)
-            dataset_valid = self.get_dataset(X_val, y_val)
+            ray_dataset_train = self.get_dataset(X, y)
+            ray_dataset_valid = self.get_dataset(X_val, y_val)
 
-        dataset["dataset_train"] = dataset_train.X
+        dataset["dataset_train"] = ray_dataset_train.X
 
-        if dataset_valid is not None:
-            assert dataset_train.y == dataset_valid.y  # TODO improve
-            dataset["dataset_valid"] = dataset_valid.X
+        if ray_dataset_valid is not None:
+            assert ray_dataset_train.y == ray_dataset_valid.y  # TODO improve
+            dataset["dataset_valid"] = ray_dataset_valid.X
 
         worker_estimator = self._get_worker_estimator()
         train_func = self._create_train_function()
@@ -685,8 +686,8 @@ class RayTrainNeuralNet(NeuralNet):
                 train_func,
                 config={
                     "dataset_class": self.dataset,
-                    "label": dataset_train.y,
-                    "dataset_params": dataset_train.get_params(),
+                    "label": ray_dataset_train.y,
+                    "dataset_params": ray_dataset_train.get_params(),
                     "estimator": worker_estimator,
                     "epochs": epochs,
                     "show_progress_bars": show_progress_bars,
@@ -700,9 +701,7 @@ class RayTrainNeuralNet(NeuralNet):
         self.initialize(initialize_ray=False)
         params = results[0]
         self.history_ = params.pop("history")
-        self.module_ = params.pop("f_params")
         params = self._get_params_io(**params)
-        params.pop("f_params")
         self.load_params(**params)
         self.worker_histories_ = [self.history_] + [
             result["history"] for result in results[1:]
@@ -718,24 +717,21 @@ class RayTrainNeuralNet(NeuralNet):
         return self
 
     def predict_proba(self, X) -> Dataset:
-        dataset = self.get_dataset(X, None)
-        dataset = RayPipelineDataset(
+        ray_dataset = RayPipelineDataset(
             X, y=None, random_shuffle_each_window=False)
         worker_estimator = self._get_worker_estimator()
 
         prediction_func = self._create_prediction_function()
 
-        estimator_params = self._get_params_io(
-            only_keys={"f_optimizer", "f_criterion"})
+        estimator_params = self._get_params_io()
         self.save_params(
-            f_params=None,
+            f_params=estimator_params["f_params"],
             f_optimizer=estimator_params["f_optimizer"],
             f_criterion=estimator_params["f_criterion"])
         estimator_params = {
             k: v.getvalue()
             for k, v in estimator_params.items()
         }
-        estimator_params["f_params"] = self.module_
 
         show_progress_bars = ray.data.impl.progress_bar._enabled
         callbacks = self.get_train_callbacks()
@@ -745,17 +741,19 @@ class RayTrainNeuralNet(NeuralNet):
                 prediction_func,
                 config={
                     "dataset_class": self.dataset,
-                    "label": dataset.y,
-                    "dataset_params": dataset.get_params(),
+                    "label": ray_dataset.y,
+                    "dataset_params": ray_dataset.get_params(),
                     "estimator": worker_estimator,
                     "estimator_params": estimator_params,
                     "history": self.history,
                     "show_progress_bars": show_progress_bars,
                 },
-                dataset={"dataset": dataset.X},
+                dataset={"dataset": ray_dataset.X},
                 callbacks=list(callbacks.values()),
             )
-        datasets: List[Dataset] = [result["X_pred"] for result in results]
+        datasets: List[ray.data.Dataset] = [
+            result["X_pred"] for result in results
+        ]
         first_dataset = datasets.pop(0)
         if datasets:
             return first_dataset.union(*datasets)
