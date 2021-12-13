@@ -6,6 +6,7 @@ import numpy as np
 import inspect
 import pandas as pd
 import collections
+import warnings
 
 from ray import train
 from ray.train.callbacks.callback import TrainingCallback
@@ -40,6 +41,8 @@ from ray_sklearn.skorch_approach.docs import (set_ray_train_neural_net_docs,
 from ray_sklearn.skorch_approach.utils import (add_callback_if_not_already_in,
                                                is_in_train_session,
                                                is_dataset_or_ray_dataset)
+
+_warned = False
 
 
 class ray_trainer_start_shutdown(AbstractContextManager):
@@ -410,6 +413,16 @@ class RayTrainNeuralNet(NeuralNet):
                  save_checkpoints: bool = False,
                  ddp_kwargs: Optional[Dict[str, Any]] = None,
                  **kwargs):
+        global _warned
+        if not _warned:
+            _warned = True
+            warnings.warn(
+                "RayTrainNeuralNet and the rest of this package are "
+                "experimental and not production ready. In particular, "
+                "validation and error handling may be spotty. If you "
+                "encounter any problems or have any suggestions, "
+                "please open an issue on GitHub.")
+
         self.trainer = trainer
         self.worker_dataset = worker_dataset
         self.num_workers = num_workers
