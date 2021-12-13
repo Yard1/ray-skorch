@@ -6,6 +6,7 @@ from queue import Queue
 from typing import Any, Callable, Dict, Iterable, Optional, Union, TYPE_CHECKING
 from skorch.callbacks.training import Checkpoint
 
+from torch.nn.parallel.distributed import DistributedDataParallel
 from torch.profiler import profile, record_function, ProfilerActivity, schedule
 
 from ray import train
@@ -369,8 +370,10 @@ class TrainCheckpoint(Checkpoint, TrainSklearnCallback):
         params = {}
 
         # ensure a non DDP-wrapped module is saved
-        ddp_module = net.module_
-        net.module_ = net.module_.module
+        ddp_module = None
+        if isinstance(net.module_, DistributedDataParallel):
+            ddp_module = net.module_
+            net.module_ = net.module_.module
 
         for key, val in kwargs_module.items():
             if val is None:
@@ -394,7 +397,8 @@ class TrainCheckpoint(Checkpoint, TrainSklearnCallback):
                 pickle.dump(net, f)
             params["f_pickle"] = f_pickle
 
-        net.module_ = ddp_module
+        if ddp_module:
+            net.module_ = ddp_module
 
         epoch = net.history[-1]["epoch"]
         keys_to_load = tuple(key for key in params.keys() if key != "f_pickle")
