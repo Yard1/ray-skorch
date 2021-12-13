@@ -76,4 +76,5 @@ if __name__ == "__main__":
     print(reg.history)
     assert reg.history[-1]["epoch"] == args.epochs
 
+    print(reg.module_)
     print("Done!")
