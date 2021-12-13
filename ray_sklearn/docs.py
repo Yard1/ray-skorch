@@ -1,6 +1,6 @@
 from skorch.net import NeuralNet
 
-from ray_sklearn.skorch_approach.utils import insert_before_substring
+from ray_sklearn.utils import insert_before_substring
 
 _docstring_neural_net_ray_args = """    num_workers : int
       Number of Ray Train workers to use.

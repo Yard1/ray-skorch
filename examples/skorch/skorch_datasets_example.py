@@ -8,8 +8,8 @@ from pprint import pprint
 
 import ray
 import ray.data
-from ray_sklearn.skorch_approach.base import RayTrainNeuralNet
-from ray_sklearn.skorch_approach.dataset import RayDataset
+from ray_sklearn import RayTrainNeuralNet
+from ray_sklearn.dataset import RayDataset
 
 from basic_example import data_creator, RegressorModule
 

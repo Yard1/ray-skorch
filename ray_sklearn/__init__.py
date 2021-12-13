@@ -1,1 +1,3 @@
-from .tabnet_approach import *
+from .base import RayTrainNeuralNet
+
+__all__ = ["RayTrainNeuralNet"]

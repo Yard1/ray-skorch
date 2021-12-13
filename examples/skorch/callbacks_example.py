@@ -5,10 +5,10 @@ from torch import nn
 
 from ray.data import from_pandas
 
-from ray_sklearn.skorch_approach.base import RayTrainNeuralNet
-from ray_sklearn.skorch_approach.callbacks.constants import PROFILER_KEY
-from ray_sklearn.skorch_approach.callbacks.skorch import PytorchProfilerLogger
-from ray_sklearn.skorch_approach.callbacks.train import DetailedHistoryPrintCallback
+from ray_sklearn import RayTrainNeuralNet
+from ray_sklearn.callbacks.constants import PROFILER_KEY
+from ray_sklearn.callbacks.skorch import PytorchProfilerLogger
+from ray_sklearn.callbacks.train import DetailedHistoryPrintCallback
 
 from basic_example import data_creator, RegressorModule
 

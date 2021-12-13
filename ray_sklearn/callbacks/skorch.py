@@ -14,13 +14,13 @@ from skorch.callbacks import Callback, EpochTimer
 from skorch.callbacks.logging import filter_log_keys
 from skorch.utils import _check_f_arguments, noop
 
-from ray_sklearn.skorch_approach.utils import (is_in_train_session,
+from ray_sklearn.utils import (is_in_train_session,
                                                is_using_gpu)
-from ray_sklearn.skorch_approach.callbacks.constants import PROFILER_KEY
-from ray_sklearn.skorch_approach.callbacks.utils import SortedKeysMixin
+from ray_sklearn.callbacks.constants import PROFILER_KEY
+from ray_sklearn.callbacks.utils import SortedKeysMixin
 
 if TYPE_CHECKING:
-    from ray_sklearn.skorch_approach.base import _WorkerRayTrainNeuralNet
+    from ray_sklearn.base import _WorkerRayTrainNeuralNet
 
 
 class TrainSklearnCallback(Callback):

@@ -8,7 +8,7 @@ from skorch.utils import is_dataset
 import torch
 
 if TYPE_CHECKING:
-    from ray_sklearn.skorch_approach.callbacks.skorch import TrainSklearnCallback
+    from ray_sklearn.callbacks.skorch import TrainSklearnCallback
     from ray.train.callbacks import TrainingCallback
 
 
