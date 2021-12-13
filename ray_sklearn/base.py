@@ -1,5 +1,12 @@
-from typing import (Any, Callable, Dict, List, Optional, OrderedDict, Set,
-                    Tuple, Type, Union)
+from typing import (Any, Callable, Dict, List, Optional, Set, Tuple, Type,
+                    Union)
+try:
+    from typing import OrderedDict as _OrderedDict
+    OrderedDict = _OrderedDict
+except ImportError:
+    # For Python 3.6
+    OrderedDict = Dict
+
 from contextlib import AbstractContextManager
 import io
 import inspect
@@ -538,7 +545,7 @@ class RayTrainNeuralNet(NeuralNet):
             callbacks.append(("tbx_profiler_logger", tbx_callback))
         return callbacks
 
-    def get_train_callbacks(self) -> OrderedDict[str, TrainingCallback]:
+    def get_train_callbacks(self) -> "OrderedDict[str, TrainingCallback]":
         # TODO guard against duplicate keys
         # TODO do what initialize_callbacks does
         train_callbacks = self.train_callbacks or []
