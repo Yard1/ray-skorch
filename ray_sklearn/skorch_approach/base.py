@@ -552,22 +552,25 @@ class RayTrainNeuralNet(NeuralNet):
             callbacks.append(("tbx_profiler_logger", tbx_callback))
         return callbacks
 
-    def get_train_callbacks(self) -> OrderedDict[str, TrainingCallback]:
+    def get_train_callbacks(self) -> List[TrainingCallback]:
         # TODO guard against duplicate keys
         # TODO do what initialize_callbacks does
         train_callbacks = self.train_callbacks or []
-        if isinstance(self.train_callbacks, dict):
-            train_callbacks = list(train_callbacks.items())
+        # If we got a list of just callbacks, turn them into a (name, callback)
+        # list
         self.train_callbacks_ = [
             callback
             if isinstance(callback, tuple) else (callback.__name__, callback)
             for callback in train_callbacks
         ]
+
         default_callbacks = self.get_default_train_callbacks()
+        # put in default callbacks only if there are no
+        # callbacks with their name or type already
         for name, callback in default_callbacks:
             add_callback_if_not_already_in(name, callback,
                                            self.train_callbacks_)
-        return collections.OrderedDict(self.train_callbacks_)
+        return [callback for name, callback in self.train_callbacks_]
 
     def _create_train_function(self) -> Callable[[Dict[str, Any]], None]:
         """Create the Ray Train training function to be ran on all workers."""
@@ -735,7 +738,7 @@ class RayTrainNeuralNet(NeuralNet):
                     "fit_params": fit_params
                 },
                 dataset=dataset,
-                callbacks=list(callbacks.values()),
+                callbacks=callbacks,
                 checkpoint=checkpoint)
 
         # get back params and history from rank 0 worker
@@ -749,7 +752,7 @@ class RayTrainNeuralNet(NeuralNet):
         ]
 
         history_logger = next(
-            (callback for callback in callbacks.values()
+            (callback for callback in callbacks
              if isinstance(callback, HistoryLoggingCallback)), None)
         if history_logger:
             self.ray_train_history_ = history_logger._history
@@ -790,7 +793,7 @@ class RayTrainNeuralNet(NeuralNet):
                     "show_progress_bars": show_progress_bars,
                 },
                 dataset={"dataset": ray_dataset.X},
-                callbacks=list(callbacks.values()),
+                callbacks=callbacks,
             )
         datasets: List[ray.data.Dataset] = [
             result["X_pred"] for result in results
