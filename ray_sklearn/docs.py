@@ -65,7 +65,9 @@ _docstring_neural_net_ray_fit_params = """        X_val : validation data, compa
 
 def set_ray_train_neural_net_docs(ray_train_neural_net_class):
     ray_train_neural_net_class.__doc__ = NeuralNet.__doc__.replace(
-        "NeuralNet base class.", "Distributed Skorch NeuralNet with Ray Train."
+        "NeuralNet base class.",
+        ("Distributed Skorch NeuralNet with Ray Train. "
+         "Experimental and not production ready.")
     ).replace(
         ("train_split : None or callable (default=skorch.dataset."
          "ValidSplit(5))"), ("train_split : None or callable "
