@@ -368,6 +368,10 @@ class TrainCheckpoint(Checkpoint, TrainSklearnCallback):
 
         params = {}
 
+        # ensure a non DDP-wrapped module is saved
+        ddp_module = net.module_
+        net.module_ = net.module_.module
+
         for key, val in kwargs_module.items():
             if val is None:
                 continue
@@ -389,6 +393,8 @@ class TrainCheckpoint(Checkpoint, TrainSklearnCallback):
             with open(f_pickle, 'wb') as f:
                 pickle.dump(net, f)
             params["f_pickle"] = f_pickle
+
+        net.module_ = ddp_module
 
         epoch = net.history[-1]["epoch"]
         keys_to_load = tuple(key for key in params.keys() if key != "f_pickle")

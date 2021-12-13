@@ -1,26 +1,25 @@
-from typing import Callable, Dict, List, Optional, Tuple, Type, Union
+from typing import (Any, Callable, Dict, List, Optional, OrderedDict, Set,
+                    Tuple, Type, Union)
 from contextlib import AbstractContextManager
 import io
 import numpy as np
 import inspect
+import pandas as pd
+import collections
 
 from ray import train
 from ray.train.callbacks.callback import TrainingCallback
 from ray.train.trainer import Trainer
-from ray.train.session import get_session
 import ray.data
 import ray.data.impl.progress_bar
 from ray.data.dataset import Dataset
-from ray.data.dataset_pipeline import DatasetPipeline
 
 from skorch import NeuralNet
-from skorch.callbacks import Callback
 from skorch.callbacks import PassthroughScoring
 from skorch.callbacks.base import _issue_warning_if_on_batch_override
-from skorch.callbacks.logging import filter_log_keys
 from skorch.dataset import Dataset as SkorchDataset, unpack_data
 from skorch.history import History
-from skorch.utils import is_dataset, to_tensor
+from skorch.utils import to_tensor
 
 import torch
 
@@ -32,8 +31,8 @@ from ray_sklearn.skorch_approach.callbacks.train import (
 from ray_sklearn.skorch_approach.callbacks.skorch import (
     TrainSklearnCallback, TrainCheckpoint, TrainReportCallback,
     PerformanceLogger, EpochTimerS, PytorchProfilerLogger)
-from ray_sklearn.skorch_approach.dataset import (FixedSplit, PipelineIterator,
-                                                 dataset_factory)
+from ray_sklearn.skorch_approach.dataset import (
+    FixedSplit, PipelineIterator, RayPipelineDataset, dataset_factory)
 from ray_sklearn.skorch_approach.docs import (set_ray_train_neural_net_docs,
                                               set_worker_neural_net_docs)
 
@@ -78,7 +77,7 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
                  iterator_train=PipelineIterator,
                  iterator_valid=PipelineIterator,
                  dataset=dataset_factory,
-                 train_split=FixedSplit(0.2),
+                 train_split=None,
                  callbacks=None,
                  predict_nonlinearity='auto',
                  warm_start=False,
@@ -86,7 +85,11 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
                  device='cpu',
                  profile: bool = False,
                  save_checkpoints: bool = False,
+                 ddp_kwargs: Optional[Dict[str, Any]] = None,
                  **kwargs):
+        self.profile = profile
+        self.save_checkpoints = save_checkpoints
+        self.ddp_kwargs = ddp_kwargs
         super().__init__(
             module,
             criterion,
@@ -104,8 +107,6 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
             verbose=verbose,
             device=device,
             **kwargs)
-        self.profile = profile
-        self.save_checkpoints = save_checkpoints
 
     def on_forward_pass_begin(self, net, X=None, **kwargs):
         """Called at the beginning of forward pass."""
@@ -202,10 +203,13 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
             self.callbacks_.append(report_callback)
         return self
 
-    def initialize_module(self):
-        super().initialize_module()
-        self.module_ = train.torch.prepare_model(
-            self.module_, ddp_kwargs=dict(find_unused_parameters=True))
+    # TODO make this a callback
+    def wrap_module_in_ddp(self):
+        if not isinstance(self.module_, DistributedDataParallel):
+            ddp_kwargs = self.ddp_kwargs or {}
+            ddp_kwargs = {**{"find_unused_parameters": True}, **ddp_kwargs}
+            self.module_ = train.torch.prepare_model(
+                self.module_, ddp_kwargs=ddp_kwargs)
         return self
 
     def initialize(self):
@@ -276,6 +280,7 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
             self.initialize()
 
         self.notify('on_train_begin', X=X, y=y)
+        self.wrap_module_in_ddp()
         try:
             self.fit_loop(X, y, X_val=X_val, y_val=y_val, **fit_params)
         except KeyboardInterrupt:
@@ -365,6 +370,10 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
         self.notify('on_y_to_device_end', y=y_true)
         return self.criterion_(y_pred, y_true)
 
+    def predict_proba(self, X):
+        self.wrap_module_in_ddp()
+        return super().predict_proba(X)
+
 
 set_worker_neural_net_docs(_WorkerRayTrainNeuralNet)
 
@@ -372,9 +381,7 @@ set_worker_neural_net_docs(_WorkerRayTrainNeuralNet)
 class RayTrainNeuralNet(NeuralNet):
     # Docstring modified through set_ray_train_neural_net_docs
 
-    prefixes_ = NeuralNet.prefixes_ + [
-        "worker_dataset", "trainer", "train_callbacks"
-    ]
+    prefixes_ = NeuralNet.prefixes_ + ["worker_dataset"]
 
     def __init__(self,
                  module,
@@ -400,6 +407,7 @@ class RayTrainNeuralNet(NeuralNet):
                  trainer: Union[Type[Trainer], Trainer] = Trainer,
                  profile: bool = False,
                  save_checkpoints: bool = False,
+                 ddp_kwargs: Optional[Dict[str, Any]] = None,
                  **kwargs):
         self.trainer = trainer
         self.worker_dataset = worker_dataset
@@ -407,6 +415,7 @@ class RayTrainNeuralNet(NeuralNet):
         self.profile = profile
         self.save_checkpoints = save_checkpoints
         self.train_callbacks = train_callbacks
+        self.ddp_kwargs = ddp_kwargs
         super().__init__(
             module,
             criterion,
@@ -424,6 +433,12 @@ class RayTrainNeuralNet(NeuralNet):
             verbose=verbose,
             device=device,
             **kwargs)
+
+    @property
+    def latest_checkpoint_(self):
+        """Same as ``self.trainer_.latest_checkpoint``."""
+        self.check_is_fitted(["trainer_"])
+        return self.trainer_.latest_checkpoint
 
     def initialize(self, initialize_ray=True):
         self._initialize_virtual_params()
@@ -482,7 +497,8 @@ class RayTrainNeuralNet(NeuralNet):
         self.trainer_ = trainer
         return self
 
-    def _get_params_io(self, only_keys=None, **values):
+    def _get_params_io(self, only_keys: Optional[Set[str]] = None,
+                       **values) -> Dict[str, io.BytesIO]:
         ret = {
             "f_params": io.BytesIO(values.get("f_params", None)),
             "f_optimizer": io.BytesIO(values.get("f_optimizer", None)),
@@ -505,7 +521,7 @@ class RayTrainNeuralNet(NeuralNet):
         for attr in attributes_to_remove:
             del est.__dict__[attr]
         est.__class__ = _WorkerRayTrainNeuralNet
-        est.set_params(dataset=self.worker_dataset)
+        est.set_params(dataset=self.worker_dataset, train_split=None)
         return est
 
     def get_default_train_callbacks(
@@ -522,7 +538,7 @@ class RayTrainNeuralNet(NeuralNet):
             callbacks.append(("tbx_profiler_logger", tbx_callback))
         return callbacks
 
-    def get_train_callbacks(self) -> List[Tuple[str, TrainingCallback]]:
+    def get_train_callbacks(self) -> OrderedDict[str, TrainingCallback]:
         # TODO guard against duplicate keys
         # TODO do what initialize_callbacks does
         train_callbacks = self.train_callbacks or []
@@ -537,7 +553,77 @@ class RayTrainNeuralNet(NeuralNet):
         for name, callback in default_callbacks:
             add_callback_if_not_already_in(name, callback,
                                            self.train_callbacks_)
-        return self.train_callbacks_
+        return collections.OrderedDict(self.train_callbacks_)
+
+    def _create_train_function(self) -> Callable[[Dict[str, Any]], None]:
+        """Create the Ray Train training function to be ran on all workers."""
+
+        def train_func(config):
+            label: str = config.pop("label")
+            dataset_class: Type[RayPipelineDataset] = config.pop(
+                "dataset_class")
+            dataset_params: Dict[str, Any] = config.pop("dataset_params")
+            estimator: _WorkerRayTrainNeuralNet = config.pop("estimator")
+            epochs: int = config.pop("epochs")
+            show_progress_bars: bool = config.pop("show_progress_bars")
+            fit_params: Dict[str, Any] = config.pop("fit_params")
+            ray.data.set_progress_bars(show_progress_bars)
+
+            X_train = dataset_class(
+                train.get_dataset_shard("dataset_train"), label)
+            X_train.set_params(**dataset_params)
+            try:
+                X_val = dataset_class(
+                    train.get_dataset_shard("dataset_valid"), label)
+                X_val.set_params(**dataset_params)
+            except KeyError:
+                X_val = None
+
+            original_device = estimator.device
+            estimator.set_params(device=train.torch.get_device())
+            estimator.fit(
+                X_train, None, epochs=epochs, X_val=X_val, **fit_params)
+
+            if train.world_rank() == 0:
+                estimator.set_params(device=original_device)
+                output = self._get_params_io()
+                # get the module from inside DistributedDataParallel
+                estimator.module_ = estimator.module_.module
+                estimator.save_params(**output)
+                output = {k: v.getvalue() for k, v in output.items()}
+            else:
+                output = {}
+            output["history"] = estimator.history_
+            return output
+
+        return train_func
+
+    def _create_prediction_function(self) -> Callable[[Dict[str, Any]], None]:
+        """Create the Ray Train pred function to be ran on all workers."""
+
+        def prediction_func(config):
+            label: str = config.pop("label")
+            dataset_class: Type[RayPipelineDataset] = config.pop(
+                "dataset_class")
+            dataset_params: Dict[str, Any] = config.pop("dataset_params")
+            estimator: _WorkerRayTrainNeuralNet = config.pop("estimator")
+            estimator_params: Dict[str, io.BytesIO] = self._get_params_io(
+                **config.pop("estimator_params"))
+            history: History = config.pop("history")
+            show_progress_bars: bool = config.pop("show_progress_bars")
+            ray.data.set_progress_bars(show_progress_bars)
+
+            X = dataset_class(train.get_dataset_shard("dataset"), label)
+            X.set_params(**dataset_params)
+
+            estimator.set_params(device=train.torch.get_device())
+            estimator.initialize().load_params(**estimator_params)
+            estimator.history = history
+            X_pred = estimator.predict_proba(X)
+            X_pred = ray.data.from_pandas(pd.DataFrame(X_pred))
+            return {"X_pred": X_pred}
+
+        return prediction_func
 
     def fit(self,
             X,
@@ -597,6 +683,8 @@ class RayTrainNeuralNet(NeuralNet):
                  y_val=None,
                  checkpoint=None,
                  **fit_params):
+        dataset: Dict[str, Dataset] = {}
+
         if X_val is None:
             dataset_train, dataset_valid = self.get_split_datasets(
                 X, y, **fit_params)
@@ -607,41 +695,18 @@ class RayTrainNeuralNet(NeuralNet):
             dataset_train = self.get_dataset(X, y)
             dataset_valid = self.get_dataset(X_val, y_val)
 
-        assert dataset_train.y == dataset_valid.y  # TODO improve
+        dataset["dataset_train"] = dataset_train.X
 
-        est = self._create_worker_estimator()
+        if dataset_valid is not None:
+            assert dataset_train.y == dataset_valid.y  # TODO improve
+            dataset["dataset_valid"] = dataset_valid.X
+
+        worker_estimator = self._get_worker_estimator()
+        train_func = self._create_train_function()
+
         show_progress_bars = ray.data.impl.progress_bar._enabled
+        callbacks = self.get_train_callbacks()
 
-        def train_func(config):
-            label = config.pop("label")
-            dataset_class = config.pop("dataset_class")
-            dataset_params = config.pop("dataset_params")
-            ray.data.set_progress_bars(show_progress_bars)
-
-            X_train = dataset_class(
-                train.get_dataset_shard("dataset_train"), label)
-            X_val = dataset_class(
-                train.get_dataset_shard("dataset_valid"), label)
-            X_train.set_params(**dataset_params)
-            X_val.set_params(**dataset_params)
-
-            original_device = est.device
-            est.set_params(device=train.torch.get_device())
-            est.fit(X_train, None, epochs=epochs, X_val=X_val, **fit_params)
-
-            if train.world_rank() == 0:
-                est.set_params(device=original_device)
-                output = self._get_params_io()
-                # get the module from inside DistributedDataParallel
-                est.module_ = est.module_.module
-                est.save_params(**output)
-                output = {k: v.getvalue() for k, v in output.items()}
-            else:
-                output = {}
-            output["history"] = est.history_
-            return output
-
-        callbacks = {k: v for k, v in self.get_train_callbacks()}
         with ray_trainer_start_shutdown(self.trainer_):
             results = self.trainer_.run(
                 train_func,
@@ -649,11 +714,12 @@ class RayTrainNeuralNet(NeuralNet):
                     "dataset_class": self.dataset,
                     "label": dataset_train.y,
                     "dataset_params": dataset_train.get_params(),
+                    "estimator": worker_estimator,
+                    "epochs": epochs,
+                    "show_progress_bars": show_progress_bars,
+                    "fit_params": fit_params
                 },
-                dataset={
-                    "dataset_train": dataset_train.X,
-                    "dataset_valid": dataset_valid.X
-                },
+                dataset=dataset,
                 callbacks=list(callbacks.values()),
                 checkpoint=checkpoint)
 
@@ -678,35 +744,49 @@ class RayTrainNeuralNet(NeuralNet):
             self.ray_train_history_ = None
         return self
 
-    def predict_proba(self, X):
-        raise NotImplementedError
+    def predict_proba(self, X) -> Dataset:
         dataset = self.get_dataset(X, None)
-        est = clone(self)
+        dataset = RayPipelineDataset(
+            X, y=None, random_shuffle_each_window=False)
+        worker_estimator = self._get_worker_estimator()
 
-        def train_func(config):
-            label = config.pop("label")
-            config = self._get_history_io(**config)
-            est.initialize(initialize_ray=False).load_params(**config)
-            X_ray_dataset = train.get_dataset_shard().to_torch(
-                label_column=label)
-            ret = est.predict_proba(X_ray_dataset)
-            return {"ret": ret}
+        prediction_func = self._create_prediction_function()
 
-        output = self._get_history_io()
+        estimator_params = self._get_params_io(
+            only_keys={"f_optimizer", "f_criterion"})
         self.save_params(
             f_params=None,
-            f_optimizer=output["f_optimizer"],
-            f_criterion=output["f_criterion"],
-            f_history=output["f_history"])
-        output.pop("f_params")
-        output = {k: v.getvalue() for k, v in output.items()}
-        output["f_params"] = self.module_
-        output["label"] = dataset.y
+            f_optimizer=estimator_params["f_optimizer"],
+            f_criterion=estimator_params["f_criterion"])
+        estimator_params = {
+            k: v.getvalue()
+            for k, v in estimator_params.items()
+        }
+        estimator_params["f_params"] = self.module_
+
+        show_progress_bars = ray.data.impl.progress_bar._enabled
+        callbacks = self.get_train_callbacks()
 
         with ray_trainer_start_shutdown(self.trainer_):
-            results = self.trainer_.run(train_func, output, dataset=dataset.X)
-        return np.vstack(
-            [result["ret"].ravel().reshape(-1, 1) for result in results])
+            results = self.trainer_.run(
+                prediction_func,
+                config={
+                    "dataset_class": self.dataset,
+                    "label": dataset.y,
+                    "dataset_params": dataset.get_params(),
+                    "estimator": worker_estimator,
+                    "estimator_params": estimator_params,
+                    "history": self.history,
+                    "show_progress_bars": show_progress_bars,
+                },
+                dataset={"dataset": dataset.X},
+                callbacks=list(callbacks.values()),
+            )
+        datasets: List[Dataset] = [result["X_pred"] for result in results]
+        first_dataset = datasets.pop(0)
+        if datasets:
+            return first_dataset.union(*datasets)
+        return first_dataset
 
 
 set_ray_train_neural_net_docs(RayTrainNeuralNet)
