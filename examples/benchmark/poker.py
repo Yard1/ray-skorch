@@ -58,6 +58,9 @@ def preprocess(df):
 
 dataset = dataset.map_batches(preprocess, batch_format="pandas")
 print(dataset)
+"""
+Dataset(num_blocks=1, num_rows=25010, schema={S1: int64, C1: int64, S2: int64, C2: int64, S3: int64, C3: int64, S4: int64, C4: int64, S5: int64, C5: int64, hand: int64, nC1: int64, nC2: int64, nC3: int64, nC4: int64, nC5: int64})
+"""
 
 if shuffle:
     dataset = dataset.random_shuffle()
@@ -98,7 +101,18 @@ tabnet_params = {"n_d": 16, "n_a": 8, "n_steps": 1,
                  "input_dim": 15, "output_dim": 10,
                  **cat_params}
 print(f"tabnet_params: {tabnet_params}")
-
+"""
+tabnet_params: {
+'n_d': 16, 
+'n_a': 8, 
+'n_steps': 1, 
+'input_dim': 15, 
+'output_dim': 10, 
+'cat_idxs': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 
+'cat_dims': [4, 13, 4, 13, 4, 13, 4, 13, 4, 13], 
+'cat_emb_dim': [4, 7, 4, 7, 4, 7, 4, 7, 4, 7]
+}
+"""
 
 ###############################################################################
 # Distributed Training Function
@@ -140,6 +154,7 @@ def train_func(config):
             X = X.to(device)
             y = y.to(device)
             y = y.squeeze(1)
+            print(X[0])
 
             pred = model(X)
             loss = criterion(pred, y)
