@@ -13,6 +13,8 @@ LABEL_COLUMN = "_label"
 
 
 def _pandas_get_name_or_column(x: Union[pd.Series, pd.DataFrame]) -> str:
+    if x is None:
+        return None
     if hasattr(x, "name"):
         return x.name
     return x.columns[0]
@@ -102,8 +104,7 @@ class RayDataset(SkorchDataset):
                 if not is_pandas_ndframe(self.y):
                     self.y = pd.DataFrame(self.y, columns=[LABEL_COLUMN])
             else:
-                self.y = pd.DataFrame(
-                    [False] * len(self.X), columns=[LABEL_COLUMN])
+                self.y = None
             if isinstance(self.X, (list, tuple)):
                 self.X = [
                     _convert_to_dataframe(x, i) for i, x in enumerate(self.X)
@@ -123,7 +124,8 @@ class RayDataset(SkorchDataset):
                 self.X = pd.concat(self.X, axis=1)
             elif not is_pandas_ndframe(self.X):
                 self.X = _convert_to_dataframe(self.X)
-            self.X = pd.concat((self.X, self.y), axis=1)
+            if self.y is not None:
+                self.X = pd.concat((self.X, self.y), axis=1)
             self.X = from_pandas(self.X)
             self._init_dataset(self.X, _pandas_get_name_or_column(self.y))
 

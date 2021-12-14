@@ -710,6 +710,17 @@ class RayTrainNeuralNet(NeuralNet):
                 y_val = y
             ray_dataset_train = self.get_dataset(X, y)
             ray_dataset_valid = self.get_dataset(X_val, y_val)
+            # TODO refactor
+            if not isinstance(ray_dataset_train, RayPipelineDataset):
+                params = ray_dataset_train.get_params()
+                ray_dataset_train = RayPipelineDataset(
+                    ray_dataset_train.X, y=ray_dataset_train.y)
+                ray_dataset_train.set_params(**params)
+            if not isinstance(ray_dataset_valid, RayPipelineDataset):
+                params = ray_dataset_valid.get_params()
+                ray_dataset_valid = RayPipelineDataset(
+                    ray_dataset_valid.X, y=ray_dataset_valid.y)
+                ray_dataset_valid.set_params(**params)
 
         dataset["dataset_train"] = ray_dataset_train.X
 
