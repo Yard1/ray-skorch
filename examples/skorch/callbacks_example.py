@@ -5,10 +5,10 @@ from torch import nn
 
 from ray.data import from_pandas
 
-from ray_sklearn.skorch_approach.base import RayTrainNeuralNet
-from ray_sklearn.skorch_approach.callbacks.constants import PROFILER_KEY
-from ray_sklearn.skorch_approach.callbacks.skorch import PytorchProfilerLogger
-from ray_sklearn.skorch_approach.callbacks.train import DetailedHistoryPrintCallback
+from ray_sklearn import RayTrainNeuralNet
+from ray_sklearn.callbacks.constants import PROFILER_KEY
+from ray_sklearn.callbacks.skorch import PytorchProfilerLogger
+from ray_sklearn.callbacks.train import DetailedHistoryPrintCallback
 
 from basic_example import data_creator, RegressorModule
 
@@ -33,16 +33,21 @@ if __name__ == "__main__":
         help="Enables GPU training")
     parser.add_argument(
         "--epochs", type=int, default=3, help="Number of epochs to train for.")
+    parser.add_argument(
+        "--num-cpus",
+        type=int,
+        default=None,
+        help="Number of cpus to start ray with.")
 
     args = parser.parse_args()
-    ray.init(address=args.address)
+    ray.init(address=args.address, num_cpus=args.num_cpus)
 
     X, y = data_creator(2000, 20)
 
     X = pd.DataFrame(X)
     y = pd.Series(y.ravel())
     y.name = "target"
-    
+
     columns = list(X.columns)
     num_columns = X.shape[1]
 
@@ -68,11 +73,7 @@ if __name__ == "__main__":
         train_callbacks=[
             ("print",
              DetailedHistoryPrintCallback(keys_to_not_print={PROFILER_KEY}))
-        ]
-        #train_split=None,
-        # Shuffle training data on each epoch
-        #iterator_train__shuffle=True,
-    )
+        ])
     reg.fit(dataset, "target")
     print(reg.ray_train_history_)
 
