@@ -5,7 +5,7 @@ from torch import nn
 
 from ray.data import from_pandas
 
-from ray_sklearn.skorch_approach.base import RayTrainNeuralNet
+from ray_sklearn import RayTrainNeuralNet
 
 from basic_example import (data_creator, RegressorModule,
                            RegressorModuleMultiInputList,
@@ -45,9 +45,14 @@ if __name__ == "__main__":
         help="Enables GPU training")
     parser.add_argument(
         "--epochs", type=int, default=3, help="Number of epochs to train for.")
+    parser.add_argument(
+        "--num-cpus",
+        type=int,
+        default=None,
+        help="Number of cpus to start ray with.")
 
     args = parser.parse_args()
-    ray.init(address=args.address)
+    ray.init(address=args.address, num_cpus=args.num_cpus)
 
     X, y = data_creator(2000, 20)
 
@@ -79,7 +84,6 @@ if __name__ == "__main__":
     )
     reg.fit(
         train_dataset_pipeline, "target", X_val=validation_dataset_pipeline)
-    #print(reg.predict(X))
 
     print("Running multi input example")
 
