@@ -1,18 +1,15 @@
 import argparse
 
-import numpy as np
 import pandas as pd
 
 from torch import nn
-from pprint import pprint
 
 import ray
 import ray.data
-from ray_sklearn.skorch_approach.base import RayTrainNeuralNet
-from ray_sklearn.skorch_approach.dataset import RayDataset
+from ray_sklearn import RayTrainNeuralNet
+from ray_sklearn.dataset import RayDataset
 
 from basic_example import data_creator, RegressorModule
-
 
 ray.data.set_progress_bars(False)
 
@@ -37,9 +34,14 @@ if __name__ == "__main__":
         help="Enables GPU training")
     parser.add_argument(
         "--epochs", type=int, default=3, help="Number of epochs to train for.")
+    parser.add_argument(
+        "--num-cpus",
+        type=int,
+        default=None,
+        help="Number of cpus to start ray with.")
 
     args = parser.parse_args()
-    ray.init(address=args.address)
+    ray.init(address=args.address, num_cpus=args.num_cpus)
 
     X, y = data_creator(2000, 20)
 
@@ -61,14 +63,7 @@ if __name__ == "__main__":
         device=device,
         module__input_dim=num_columns,
         module__output_dim=1,
-        #train_split=None,
-        # Shuffle training data on each epoch
-        #iterator_train__shuffle=True,
     )
     reg.fit(dataset, "target")
-    #print(reg.predict(X))
 
-    #pprint(reg.history)
-    #pprint(reg.worker_histories_)
-    #pprint(reg.ray_train_history_)
     print("Done!")
