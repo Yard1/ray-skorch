@@ -22,10 +22,10 @@ ray.data.set_progress_bars(False)
 num_workers = 1
 use_gpu = False
 address = None
-num_epochs = 50
+num_epochs = 200
 batch_size = 512
 worker_batch_size = None
-shuffle = False
+shuffle = True
 lr = 0.02
 debug = True
 
@@ -119,6 +119,7 @@ tabnet_params: {
 ###############################################################################
 
 def train_func(config):
+    ray.data.set_progress_bars(False)
     print(datasets)
     train_dataset_pipeline = train.get_dataset_shard(
         "train_dataset_pipeline")
@@ -278,7 +279,7 @@ bst = xgboost_ray.train(
     evals_result=evals_result,
     ray_params=ray_params,
     verbose_eval=False,
-    num_boost_round=10)
+    num_boost_round=num_epochs)
 
 test_set = RayDMatrix(test_dataset, target)
 pred = xgboost_ray.predict(bst, test_set, ray_params=ray_params)
@@ -290,10 +291,10 @@ print(f"XGBoost test acc: {xgb_acc}")
 # Final Results
 ###############################################################################
 
-print("\n================================")
+print("\n===================================")
 print(f"TabNet test acc: {tabnet_acc}")
 print(f"XGBoost test acc: {xgb_acc}")
-print("\n================================")
+print("===================================")
 
 
 
