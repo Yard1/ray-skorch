@@ -154,7 +154,6 @@ def train_func(config):
             X = X.to(device)
             y = y.to(device)
             y = y.squeeze(1)
-            print(X[0])
 
             pred = model(X)
             loss = criterion(pred, y)
