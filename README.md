@@ -1,4 +1,4 @@
-# ray-sklearn
+# train-sklearn
 
 [skorch](https://github.com/skorch-dev/skorch)-based wrapper for [Ray Train](https://docs.ray.io/en/latest/train/train.html). Experimental!
 
