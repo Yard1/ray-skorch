@@ -2,7 +2,7 @@ from typing import Optional
 import pytest
 from sklearn.utils.estimator_checks import check_estimator
 
-from ray_sklearn.tabnet_approach import TabNetClassifier, TabNetRegressor
+from train_sklearn.tabnet_approach import TabNetClassifier, TabNetRegressor
 
 _estimator_classes = [TabNetClassifier, TabNetRegressor]
 

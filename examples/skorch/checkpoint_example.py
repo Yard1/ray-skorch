@@ -5,7 +5,7 @@ from torch import nn
 
 from ray.data import from_pandas
 
-from ray_sklearn import RayTrainNeuralNet
+from train_sklearn import RayTrainNeuralNet
 
 from basic_example import data_creator, RegressorModule
 

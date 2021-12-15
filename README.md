@@ -17,7 +17,7 @@ import numpy as np
 from sklearn.datasets import make_classification
 from torch import nn
 
-from ray_sklearn import RayTrainNeuralNet
+from train_sklearn import RayTrainNeuralNet
 
 X, y = make_classification(1000, 20, n_informative=10, random_state=0)
 X = X.astype(np.float32)
@@ -70,7 +70,7 @@ from sklearn.datasets import make_classification
 from torch import nn
 from ray.data import from_pandas
 
-from ray_sklearn import RayTrainNeuralNet
+from train_sklearn import RayTrainNeuralNet
 
 X, y = make_classification(1000, 20, n_informative=10, random_state=0)
 X = pd.DataFrame(X.astype(np.float32))

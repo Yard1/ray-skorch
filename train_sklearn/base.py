@@ -25,18 +25,18 @@ from torch.nn.parallel.distributed import DistributedDataParallel
 
 from sklearn.base import clone
 
-from ray_sklearn.callbacks.train import (
+from train_sklearn.callbacks.train import (
     HistoryLoggingCallback, TableHistoryPrintCallback,
     DetailedHistoryPrintCallback, TBXProfilerCallback)
-from ray_sklearn.callbacks.skorch import (
+from train_sklearn.callbacks.skorch import (
     TrainSklearnCallback, TrainCheckpoint, TrainReportCallback,
     PerformanceLogger, EpochTimerS, PytorchProfilerLogger)
-from ray_sklearn.dataset import (FixedSplit, PipelineIterator,
+from train_sklearn.dataset import (FixedSplit, PipelineIterator,
                                  RayPipelineDataset, dataset_factory)
-from ray_sklearn.docs import (set_ray_train_neural_net_docs,
+from train_sklearn.docs import (set_ray_train_neural_net_docs,
                               set_worker_neural_net_docs)
 
-from ray_sklearn.utils import (add_callback_if_not_already_in,
+from train_sklearn.utils import (add_callback_if_not_already_in,
                                is_in_train_session, is_dataset_or_ray_dataset)
 
 _warned = False

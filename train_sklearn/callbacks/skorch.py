@@ -14,12 +14,12 @@ from ray import train
 from skorch.callbacks import Callback, EpochTimer
 from skorch.utils import _check_f_arguments, noop
 
-from ray_sklearn.utils import is_using_gpu
-from ray_sklearn.callbacks.constants import PROFILER_KEY
-from ray_sklearn.callbacks.utils import SortedKeysMixin
+from train_sklearn.utils import is_using_gpu
+from train_sklearn.callbacks.constants import PROFILER_KEY
+from train_sklearn.callbacks.utils import SortedKeysMixin
 
 if TYPE_CHECKING:
-    from ray_sklearn.base import _WorkerRayTrainNeuralNet  # noqa: F401
+    from train_sklearn.base import _WorkerRayTrainNeuralNet  # noqa: F401
 
 
 class TrainSklearnCallback(Callback):
