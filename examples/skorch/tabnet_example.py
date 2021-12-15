@@ -5,8 +5,8 @@ from torch import nn
 
 from ray.data import from_pandas
 
-from ray_sklearn import RayTrainNeuralNet
-from ray_sklearn.models import TabNet
+from train_sklearn import RayTrainNeuralNet
+from train_sklearn.models import TabNet
 
 from basic_example import data_creator
 
