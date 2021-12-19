@@ -2,6 +2,7 @@ import argparse
 import pandas as pd
 import ray
 from torch import nn
+from sklearn.metrics import mean_squared_error
 
 from ray.data import from_pandas
 
@@ -70,5 +71,6 @@ if __name__ == "__main__":
 
     print(X_pred)
     print(X_pred.to_pandas())
+    print(f"MSE: {mean_squared_error(y, X_pred.to_pandas())}")
 
     print("Done!")
