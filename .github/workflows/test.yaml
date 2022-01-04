@@ -23,7 +23,7 @@ jobs:
         python -m pip install -U yapf==0.23.0 flake8==3.7.7 flake8-comprehensions flake8-quotes==2.0.0
     - name: Print environment info
       run: |
-        ./train_sklearn/tests/env_info.sh
+        ./train_sklearn/env_info.sh
     - name: Run format script
       run: |
         ./format.sh --all
@@ -58,7 +58,7 @@ jobs:
         python -m pip install -e .
     - name: Print environment info
       run: |
-        ./train_sklearn/tests/env_info.sh
+        ./train_sklearn/env_info.sh
     - name: Run examples
       uses: nick-invision/retry@v2
       with:
@@ -89,7 +89,7 @@ jobs:
         python -m pip install -e .
     - name: Print environment info
       run: |
-        ./train_sklearn/tests/env_info.sh
+        ./train_sklearn/env_info.sh
     - name: Run examples
       uses: nick-invision/retry@v2
       with:

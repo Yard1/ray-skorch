@@ -4,7 +4,7 @@
 
 1. Run `pip install -e .` to install necessary packages
 2. Upon push, run `./format.sh` to make sure lint changes are applied appropriately.
-3. The current working examples can be found in `examples/skorch`.
+3. The current working examples can be found in `examples`.
 
 > :warning: `RayTrainNeuralNet` and the rest of this package are experimental and not production ready. In particular, validation and error handling may be spotty. If you encounter any problems or have any suggestions please open an issue on GitHub.
 

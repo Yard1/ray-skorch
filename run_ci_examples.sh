@@ -1,6 +1,6 @@
 set -e
 
-pushd examples/skorch || exit 1
+pushd examples || exit 1
 ray stop || true
 echo "================"
 echo "Running examples"
