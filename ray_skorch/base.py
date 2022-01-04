@@ -65,13 +65,12 @@ from ray_skorch.callbacks.skorch import (
     TrainSklearnCallback, TrainCheckpoint, TrainReportCallback,
     PerformanceLogger, EpochTimerS, PytorchProfilerLogger)
 from ray_skorch.dataset import (FixedSplit, PipelineIterator,
-                                   RayPipelineDataset, dataset_factory)
+                                RayPipelineDataset, dataset_factory)
 from ray_skorch.docs import (set_ray_train_neural_net_docs,
-                                set_worker_neural_net_docs)
+                             set_worker_neural_net_docs)
 
 from ray_skorch.utils import (add_callback_if_not_already_in,
-                                 is_in_train_session,
-                                 is_dataset_or_ray_dataset)
+                              is_in_train_session, is_dataset_or_ray_dataset)
 
 _warned = False
 
