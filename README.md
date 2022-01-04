@@ -8,7 +8,14 @@
 
 > :warning: `RayTrainNeuralNet` and the rest of this package are experimental and not production ready. In particular, validation and error handling may be spotty. If you encounter any problems or have any suggestions please open an issue on GitHub.
 
+## Known issues & missing features
+
+* Only numpy arrays, pandas dataframes and Ray Data Datasets are supported as inputs.
+* Compatibility with scikit-learn hyperparameter tuners is not tested.
+
 ## Basic example
+
+The only breaking API difference compared to `skorch` is the addition of a new `num_workers` argument, contolling how many Ray workers to use for training. Please refer to docstrings for more information on other changes.
 
 ### With numpy/pandas
 
@@ -45,7 +52,7 @@ class MyModule(nn.Module):
 
 net = RayTrainNeuralNet(
     MyModule,
-    num_workers=2,
+    num_workers=2,  # the only new mandatory argument
     criterion=nn.CrossEntropyLoss,
     max_epochs=10,
     lr=0.1,
@@ -104,7 +111,7 @@ class MyModule(nn.Module):
 
 net = RayTrainNeuralNet(
     MyModule,
-    num_workers=2,
+    num_workers=2,  # the only new mandatory argument
     criterion=nn.CrossEntropyLoss,
     max_epochs=10,
     lr=0.1,
