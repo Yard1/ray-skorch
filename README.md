@@ -1,12 +1,20 @@
-# train-sklearn
+# ray-skorch
+
+*Distributed skorch on Ray Train*
+
+`pip install ray-skorch`
 
 [skorch](https://github.com/skorch-dev/skorch)-based wrapper for [Ray Train](https://docs.ray.io/en/latest/train/train.html). Experimental!
+
+> :warning: `RayTrainNeuralNet` and the rest of this package are experimental and not production ready. In particular, validation and error handling may be spotty. If you encounter any problems or have any suggestions please open an issue on GitHub.
+
+We are looking for feedback! Please let us know about your experience using ray-skorch and about any suggestions and problems you may have by opening an issue. We are also interested in feedback on the concept of distributed training with scikit-learn(like) interfaces itself.
+
+## Development
 
 1. Run `pip install -e .` to install necessary packages
 2. Upon push, run `./format.sh` to make sure lint changes are applied appropriately.
 3. The current working examples can be found in `examples`.
-
-> :warning: `RayTrainNeuralNet` and the rest of this package are experimental and not production ready. In particular, validation and error handling may be spotty. If you encounter any problems or have any suggestions please open an issue on GitHub.
 
 ## Known issues & missing features
 
@@ -24,7 +32,7 @@ import numpy as np
 from sklearn.datasets import make_classification
 from torch import nn
 
-from train_sklearn import RayTrainNeuralNet
+from ray_skorch import RayTrainNeuralNet
 
 X, y = make_classification(1000, 20, n_informative=10, random_state=0)
 X = X.astype(np.float32)
@@ -77,7 +85,7 @@ from sklearn.datasets import make_classification
 from torch import nn
 from ray.data import from_pandas
 
-from train_sklearn import RayTrainNeuralNet
+from ray_skorch import RayTrainNeuralNet
 
 X, y = make_classification(1000, 20, n_informative=10, random_state=0)
 X = pd.DataFrame(X.astype(np.float32))
