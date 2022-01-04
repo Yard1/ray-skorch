@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 ROOT_DIR = os.path.dirname(__file__)
 
 setup(
-    name="train_sklearn",
+    name="ray-skorch",
     packages=find_packages(),
     version="0.0.1",
     author="Antoni Baum & contributors",

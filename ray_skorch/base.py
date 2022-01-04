@@ -58,20 +58,19 @@ from torch.nn.parallel.distributed import DistributedDataParallel
 
 from sklearn.base import clone
 
-from train_sklearn.callbacks.train import (
+from ray_skorch.callbacks.train import (
     HistoryLoggingCallback, TableHistoryPrintCallback,
     DetailedHistoryPrintCallback, TBXProfilerCallback)
-from train_sklearn.callbacks.skorch import (
+from ray_skorch.callbacks.skorch import (
     TrainSklearnCallback, TrainCheckpoint, TrainReportCallback,
     PerformanceLogger, EpochTimerS, PytorchProfilerLogger)
-from train_sklearn.dataset import (FixedSplit, PipelineIterator,
-                                   RayPipelineDataset, dataset_factory)
-from train_sklearn.docs import (set_ray_train_neural_net_docs,
-                                set_worker_neural_net_docs)
+from ray_skorch.dataset import (FixedSplit, PipelineIterator,
+                                RayPipelineDataset, dataset_factory)
+from ray_skorch.docs import (set_ray_train_neural_net_docs,
+                             set_worker_neural_net_docs)
 
-from train_sklearn.utils import (add_callback_if_not_already_in,
-                                 is_in_train_session,
-                                 is_dataset_or_ray_dataset)
+from ray_skorch.utils import (add_callback_if_not_already_in,
+                              is_in_train_session, is_dataset_or_ray_dataset)
 
 _warned = False
 
@@ -186,7 +185,7 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
 
         getattr(self, method_name)(self, **cb_kwargs)
         for _, cb in self.callbacks_:
-            # Modified in train-sklearn
+            # Modified in ray-skorch
             func = getattr(cb, method_name, None)
             if func:
                 getattr(cb, method_name)(self, **cb_kwargs)
@@ -687,7 +686,7 @@ class RayTrainNeuralNet(NeuralNet):
         if self.warm_start:
             raise NotImplementedError(
                 "`warm_start` parameter is not yet supported. If you want to "
-                "resume training, pass a train-sklearn checkpoint as "
+                "resume training, pass a ray-skorch checkpoint as "
                 "`checkpoint`.")
 
         if not self.warm_start or not self.initialized_:

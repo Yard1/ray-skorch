@@ -6,8 +6,8 @@ from torch import nn
 
 import ray
 import ray.data
-from train_sklearn import RayTrainNeuralNet
-from train_sklearn.dataset import RayDataset
+from ray_skorch import RayTrainNeuralNet
+from ray_skorch.dataset import RayDataset
 
 from basic_example import data_creator, RegressorModule
 
