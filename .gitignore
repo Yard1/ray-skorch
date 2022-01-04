@@ -134,3 +134,4 @@ dmypy.json
 pytorch_profiler_trace
 ray_results
 .vscode
+HIGGS.csv.gz
