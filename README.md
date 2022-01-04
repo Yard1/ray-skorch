@@ -1,5 +1,7 @@
 # ray-skorch
 
+*Distributed skorch on Ray Train*
+
 [skorch](https://github.com/skorch-dev/skorch)-based wrapper for [Ray Train](https://docs.ray.io/en/latest/train/train.html). Experimental!
 
 1. Run `pip install -e .` to install necessary packages
