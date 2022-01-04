@@ -396,6 +396,8 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
         else:
             ret = self.module_(x, **fit_params)
         self.notify("on_forward_pass_end", X=x)
+        if isinstance(ret, tuple):
+            ret = ret[0]
         return ret
 
     # pylint: disable=unused-argument

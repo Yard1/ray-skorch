@@ -6,15 +6,9 @@ from torch import nn
 from ray.data import from_pandas
 
 from train_sklearn import RayTrainNeuralNet
-from pytorch_tabnet.tab_network import TabNet as _TabNet
+from pytorch_tabnet.tab_network import TabNet
 
 from basic_example import data_creator
-
-
-class TabNet(_TabNet):
-    def forward(self, x):
-        return super().forward(x)[0]
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
