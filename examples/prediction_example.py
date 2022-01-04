@@ -6,7 +6,7 @@ from sklearn.metrics import mean_squared_error
 
 from ray.data import from_pandas
 
-from train_sklearn import RayTrainNeuralNet
+from ray_skorch import RayTrainNeuralNet
 
 from basic_example import data_creator, RegressorModule
 

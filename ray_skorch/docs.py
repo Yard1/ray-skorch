@@ -57,7 +57,7 @@ _docstring_neural_net_ray_fit_params = """        X_val : validation data, compa
           ``train_split``.
 
         checkpoint : dict or None (default=None)
-          Train-Sklearn checkpoint to resume the training from (if
+          ray-skorch checkpoint to resume the training from (if
           ``load_checkpoint`` parameter is set to True).
 
 """  # noqa: E501

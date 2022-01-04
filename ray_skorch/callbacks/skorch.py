@@ -329,7 +329,7 @@ class TrainCheckpoint(Checkpoint, TrainSklearnCallback):
         except KeyError:
             raise ValueError(
                 "Invalid checkpoint. Ensure the checkpoint was created with "
-                "train-sklearn. Expected 'epoch' and '_keys' keys, got "
+                "ray-skorch. Expected 'epoch' and '_keys' keys, got "
                 f"{list(checkpoint.keys())}.")
         checkpoint_params = {
             k: self._get_io(k, v)

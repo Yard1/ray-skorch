@@ -10,7 +10,7 @@ import torch
 import torch.nn.functional as F
 from sklearn.datasets import make_regression
 
-from train_sklearn import RayTrainNeuralNet
+from ray_skorch import RayTrainNeuralNet
 
 
 def data_creator(rows, cols):

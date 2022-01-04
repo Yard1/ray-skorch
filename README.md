@@ -1,4 +1,4 @@
-# train-sklearn
+# ray-skorch
 
 [skorch](https://github.com/skorch-dev/skorch)-based wrapper for [Ray Train](https://docs.ray.io/en/latest/train/train.html). Experimental!
 
@@ -24,7 +24,7 @@ import numpy as np
 from sklearn.datasets import make_classification
 from torch import nn
 
-from train_sklearn import RayTrainNeuralNet
+from ray_skorch import RayTrainNeuralNet
 
 X, y = make_classification(1000, 20, n_informative=10, random_state=0)
 X = X.astype(np.float32)
@@ -77,7 +77,7 @@ from sklearn.datasets import make_classification
 from torch import nn
 from ray.data import from_pandas
 
-from train_sklearn import RayTrainNeuralNet
+from ray_skorch import RayTrainNeuralNet
 
 X, y = make_classification(1000, 20, n_informative=10, random_state=0)
 X = pd.DataFrame(X.astype(np.float32))

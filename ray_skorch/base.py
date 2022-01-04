@@ -186,7 +186,7 @@ class _WorkerRayTrainNeuralNet(NeuralNet):
 
         getattr(self, method_name)(self, **cb_kwargs)
         for _, cb in self.callbacks_:
-            # Modified in train-sklearn
+            # Modified in ray-skorch
             func = getattr(cb, method_name, None)
             if func:
                 getattr(cb, method_name)(self, **cb_kwargs)
@@ -687,7 +687,7 @@ class RayTrainNeuralNet(NeuralNet):
         if self.warm_start:
             raise NotImplementedError(
                 "`warm_start` parameter is not yet supported. If you want to "
-                "resume training, pass a train-sklearn checkpoint as "
+                "resume training, pass a ray-skorch checkpoint as "
                 "`checkpoint`.")
 
         if not self.warm_start or not self.initialized_:
