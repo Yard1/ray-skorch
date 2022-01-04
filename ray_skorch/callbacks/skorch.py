@@ -14,12 +14,12 @@ from ray import train
 from skorch.callbacks import Callback, EpochTimer
 from skorch.utils import _check_f_arguments, noop
 
-from train_sklearn.utils import is_using_gpu
-from train_sklearn.callbacks.constants import PROFILER_KEY
-from train_sklearn.callbacks.utils import SortedKeysMixin
+from ray_skorch.utils import is_using_gpu
+from ray_skorch.callbacks.constants import PROFILER_KEY
+from ray_skorch.callbacks.utils import SortedKeysMixin
 
 if TYPE_CHECKING:
-    from train_sklearn.base import _WorkerRayTrainNeuralNet  # noqa: F401
+    from ray_skorch.base import _WorkerRayTrainNeuralNet  # noqa: F401
 
 
 class TrainSklearnCallback(Callback):
@@ -329,7 +329,7 @@ class TrainCheckpoint(Checkpoint, TrainSklearnCallback):
         except KeyError:
             raise ValueError(
                 "Invalid checkpoint. Ensure the checkpoint was created with "
-                "train-sklearn. Expected 'epoch' and '_keys' keys, got "
+                "ray-skorch. Expected 'epoch' and '_keys' keys, got "
                 f"{list(checkpoint.keys())}.")
         checkpoint_params = {
             k: self._get_io(k, v)

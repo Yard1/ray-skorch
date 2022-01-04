@@ -1,6 +1,6 @@
 from skorch.net import NeuralNet
 
-from train_sklearn.utils import insert_before_substring
+from ray_skorch.utils import insert_before_substring
 
 _docstring_neural_net_ray_args = """    num_workers : int
       Number of Ray Train workers to use.
@@ -57,7 +57,7 @@ _docstring_neural_net_ray_fit_params = """        X_val : validation data, compa
           ``train_split``.
 
         checkpoint : dict or None (default=None)
-          Train-Sklearn checkpoint to resume the training from (if
+          ray-skorch checkpoint to resume the training from (if
           ``load_checkpoint`` parameter is set to True).
 
 """  # noqa: E501
@@ -71,7 +71,7 @@ def set_ray_train_neural_net_docs(ray_train_neural_net_class):
     ).replace(
         ("train_split : None or callable (default=skorch.dataset."
          "ValidSplit(5))"), ("train_split : None or callable "
-                             "(default=train_sklearn.dataset.FixedSplit(0.2))")
+                             "(default=ray_skorch.dataset.FixedSplit(0.2))")
     ).replace(
         """    By default an :class:`.EpochTimer`, :class:`.BatchScoring` (for
         both training and validation datasets), and :class:`.PrintLog`

@@ -11,8 +11,8 @@ from skorch.utils import Ansi
 from pprint import pprint
 from ray.train.callbacks import TrainingCallback
 from ray.train.callbacks.logging import TrainingSingleFileLoggingCallback
-from train_sklearn.callbacks.constants import PROFILER_KEY, AGGREGATE_KEY
-from train_sklearn.callbacks.utils import SortedKeysMixin
+from ray_skorch.callbacks.constants import PROFILER_KEY, AGGREGATE_KEY
+from ray_skorch.callbacks.utils import SortedKeysMixin
 
 
 def max_and_argmax(val):
