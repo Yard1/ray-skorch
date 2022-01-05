@@ -12,8 +12,8 @@ echo "running classification_example.py" && python classification_example.py --n
 echo "running datasets_example.py" && python datasets_example.py --num-cpus 8
 echo "running datasets_pipeline_example.py" && python datasets_pipeline_example.py --num-cpus 8
 echo "running prediction_example.py" && python prediction_example.py --num-cpus 8
-echo "running readme_example.py" && python readme_example.py
-echo "running readme_datasets_example.py" && python readme_datasets_example.py
+echo "running readme_example.py" && python readme_example.py --num-cpus 8
+echo "running readme_datasets_example.py" && python readme_datasets_example.py --num-cpus 8
 echo "running skorch_datasets_example.py" && python skorch_datasets_example.py --num-cpus 8
 echo "running tabnet_example.py" && python tabnet_example.py --num-cpus 8
 popd

@@ -57,7 +57,6 @@ class MyModule(nn.Module):
         X = self.softmax(self.output(X))
         return X
 
-
 net = RayTrainNeuralNet(
     MyModule,
     num_workers=2,  # the only new mandatory argument
@@ -115,7 +114,6 @@ class MyModule(nn.Module):
         X = self.nonlin(self.dense1(X))
         X = self.softmax(self.output(X))
         return X
-
 
 net = RayTrainNeuralNet(
     MyModule,
