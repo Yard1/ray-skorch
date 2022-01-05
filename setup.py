@@ -10,6 +10,7 @@ setup(
     version="0.0.2",
     author="Antoni Baum & contributors",
     author_email="antoni.baum@protonmail.com",
+    url="https://github.com/Yard1/ray-skorch",
     description=("Skorch on Ray Train"),
     long_description=io.open(
         os.path.join(ROOT_DIR, "README.md"), "r", encoding="utf-8").read(),
