@@ -31,8 +31,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
 # THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import (Any, Callable, Dict, List, Optional, Set, Tuple, Type,
-                    Union)
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 from contextlib import AbstractContextManager
 import io
 import inspect
@@ -70,7 +69,8 @@ from ray_skorch.docs import (set_ray_train_neural_net_docs,
                              set_worker_neural_net_docs)
 
 from ray_skorch.utils import (add_callback_if_not_already_in,
-                              is_in_train_session, is_dataset_or_ray_dataset)
+                              is_in_train_session, is_dataset_or_ray_dataset,
+                              get_params_io)
 
 _warned = False
 
@@ -543,15 +543,6 @@ class RayTrainNeuralNet(NeuralNet):
         self.trainer_ = trainer
         return self
 
-    def _get_params_io(self, only_keys: Optional[Set[str]] = None,
-                       **values) -> Dict[str, io.BytesIO]:
-        ret = {
-            "f_params": io.BytesIO(values.get("f_params", None)),
-            "f_optimizer": io.BytesIO(values.get("f_optimizer", None)),
-            "f_criterion": io.BytesIO(values.get("f_criterion", None)),
-        }
-        return {k: v for k, v in ret.items() if k in (only_keys or ret.keys())}
-
     def _create_worker_estimator(self) -> _WorkerRayTrainNeuralNet:
         """Create the worker estimator.
 
@@ -636,7 +627,7 @@ class RayTrainNeuralNet(NeuralNet):
 
             if train.world_rank() == 0:
                 estimator.set_params(device=original_device)
-                output = self._get_params_io()
+                output = get_params_io()
                 # get the module from inside DistributedDataParallel
                 if isinstance(estimator.module_, DistributedDataParallel):
                     estimator.module_ = estimator.module_.module
@@ -658,7 +649,7 @@ class RayTrainNeuralNet(NeuralNet):
                 "dataset_class")
             dataset_params: Dict[str, Any] = config.pop("dataset_params")
             estimator: _WorkerRayTrainNeuralNet = config.pop("estimator")
-            estimator_params: Dict[str, io.BytesIO] = self._get_params_io(
+            estimator_params: Dict[str, io.BytesIO] = get_params_io(
                 **config.pop("estimator_params"))
             history: History = config.pop("history")
             show_progress_bars: bool = config.pop("show_progress_bars")
@@ -789,7 +780,7 @@ class RayTrainNeuralNet(NeuralNet):
         self.initialize(initialize_ray=False)
         params = results[0]
         self.history_ = params.pop("history")
-        params = self._get_params_io(**params)
+        params = get_params_io(**params)
         self.load_params(**params)
         self.worker_histories_ = [self.history_] + [
             result["history"] for result in results[1:]
@@ -811,7 +802,7 @@ class RayTrainNeuralNet(NeuralNet):
 
         prediction_func = self._create_prediction_function()
 
-        estimator_params = self._get_params_io()
+        estimator_params = get_params_io()
         self.save_params(
             f_params=estimator_params["f_params"],
             f_optimizer=estimator_params["f_optimizer"],

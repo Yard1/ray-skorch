@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Union, Optional, Set, Dict
+import io
 from ray.train.session import get_session
 from ray.data.dataset import Dataset
 from ray.data.dataset_pipeline import DatasetPipeline
@@ -47,3 +48,13 @@ def add_callback_if_not_already_in(
         callback_list.append((callback_name, callback))
         return True
     return False
+
+
+def get_params_io(only_keys: Optional[Set[str]] = None,
+                  **values) -> Dict[str, io.BytesIO]:
+    ret = {
+        "f_params": io.BytesIO(values.get("f_params", None)),
+        "f_optimizer": io.BytesIO(values.get("f_optimizer", None)),
+        "f_criterion": io.BytesIO(values.get("f_criterion", None)),
+    }
+    return {k: v for k, v in ret.items() if k in (only_keys or ret.keys())}
