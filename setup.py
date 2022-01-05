@@ -7,7 +7,7 @@ ROOT_DIR = os.path.dirname(__file__)
 setup(
     name="ray-skorch",
     packages=find_packages(),
-    version="0.0.1",
+    version="0.0.2",
     author="Antoni Baum & contributors",
     author_email="antoni.baum@protonmail.com",
     description=("Skorch on Ray Train"),
