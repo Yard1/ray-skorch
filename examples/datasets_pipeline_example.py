@@ -57,6 +57,7 @@ if __name__ == "__main__":
     X, y = data_creator(2000, 20)
 
     X = pd.DataFrame(X)
+    X.columns = [str(colname) for colname in X.columns]
     y = pd.Series(y.ravel())
     y.name = "target"
 
