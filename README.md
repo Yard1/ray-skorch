@@ -48,13 +48,12 @@ class MyModule(nn.Module):
         self.dropout = nn.Dropout(0.5)
         self.dense1 = nn.Linear(num_units, num_units)
         self.output = nn.Linear(num_units, 2)
-        self.softmax = nn.Softmax(dim=-1)
 
     def forward(self, X, **kwargs):
         X = self.nonlin(self.dense0(X))
         X = self.dropout(X)
         X = self.nonlin(self.dense1(X))
-        X = self.softmax(self.output(X))
+        X = self.output(X)
         return X
 
 net = RayTrainNeuralNet(
@@ -107,13 +106,12 @@ class MyModule(nn.Module):
         self.dropout = nn.Dropout(0.5)
         self.dense1 = nn.Linear(num_units, num_units)
         self.output = nn.Linear(num_units, 2)
-        self.softmax = nn.Softmax(dim=-1)
 
     def forward(self, X, **kwargs):
         X = self.nonlin(self.dense0(X))
         X = self.dropout(X)
         X = self.nonlin(self.dense1(X))
-        X = self.softmax(self.output(X))
+        X = self.output(X)
         return X
 
 net = RayTrainNeuralNet(
