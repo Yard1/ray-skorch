@@ -662,7 +662,9 @@ class RayTrainNeuralNet(NeuralNet):
             estimator.initialize().load_params(**estimator_params)
             estimator.history = history
             X_pred = estimator.predict_proba(X)
-            X_pred = ray.data.from_pandas(pd.DataFrame(X_pred))
+            X_pred = pd.DataFrame(X_pred)
+            X_pred.columns = [str(colname) for colname in X_pred.columns]
+            X_pred = ray.data.from_pandas(X_pred)
             return {"X_pred": X_pred}
 
         return prediction_func
