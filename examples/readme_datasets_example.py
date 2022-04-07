@@ -28,9 +28,9 @@ if __name__ == "__main__":
     ray.init(address=args.address, num_cpus=args.num_cpus)
 
     X, y = make_classification(1000, 20, n_informative=10, random_state=0)
-    X.columns = [str(colname) for colname in X.columns]
     X = pd.DataFrame(X.astype(np.float32))
     y = pd.Series(y.astype(np.int64))
+    X.columns = [str(colname) for colname in X.columns]
 
     X_pred = X.copy()
     X["target"] = y
