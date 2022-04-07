@@ -159,6 +159,7 @@ class RayDataset(SkorchDataset):
                 self.X = _convert_to_dataframe(self.X)
             if self.y is not None:
                 self.X = pd.concat((self.X, self.y), axis=1)
+            self.X.columns = [str(colname) for colname in self.X.columns]
             self.X = from_pandas(self.X)
             self._init_dataset(self.X, _pandas_get_name_or_column(self.y))
 
