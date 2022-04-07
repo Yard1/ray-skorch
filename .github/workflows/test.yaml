@@ -3,8 +3,8 @@ name: pytest on push
 on:
   push:
   pull_request:
-  # schedule:
-  #   - cron: "0 5 * * *"
+  schedule:
+    - cron: "0 5 * * *"
 
 jobs:
   test_lint:

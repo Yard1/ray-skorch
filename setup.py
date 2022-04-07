@@ -7,7 +7,7 @@ ROOT_DIR = os.path.dirname(__file__)
 setup(
     name="ray-skorch",
     packages=find_packages(),
-    version="0.0.2",
+    version="0.0.3",
     author="Antoni Baum & contributors",
     author_email="antoni.baum@protonmail.com",
     url="https://github.com/Yard1/ray-skorch",

@@ -10,7 +10,9 @@ from numbers import Number
 from skorch.utils import Ansi
 from pprint import pprint
 from ray.train.callbacks import TrainingCallback
-from ray.train.callbacks.logging import TrainingSingleFileLoggingCallback
+from ray.train.callbacks.logging import TrainCallbackLogdirManager
+from ray.train.callbacks.results_preprocessors import \
+    IndexedResultsPreprocessor
 from ray_skorch.callbacks.constants import PROFILER_KEY, AGGREGATE_KEY
 from ray_skorch.callbacks.utils import SortedKeysMixin
 
@@ -43,7 +45,7 @@ DEFAULT_KEYS_TO_NOT_PRINT_TABLE = DEFAULT_KEYS_TO_NOT_PRINT.union(
     {"_timestamp", "_time_this_iter_s", "_training_iteration"})
 
 
-class TBXProfilerCallback(TrainingSingleFileLoggingCallback):
+class TBXProfilerCallback(TrainingCallback):
     _default_filename = None
 
     def __init__(
@@ -53,8 +55,10 @@ class TBXProfilerCallback(TrainingSingleFileLoggingCallback):
             filename: Optional[str] = None,
             workers_to_log: Optional[Union[int, List[int]]] = None) -> None:
         self.profiler_key = profiler_key
-        super().__init__(
-            logdir=logdir, filename=filename, workers_to_log=workers_to_log)
+        self._filename = filename
+        self._logdir_manager = TrainCallbackLogdirManager(logdir=logdir)
+        self.results_preprocessor = IndexedResultsPreprocessor(
+            indices=workers_to_log)
 
     def _create_log_path(self, logdir_path: Path, filename: Path) -> Path:
         return logdir_path
@@ -62,11 +66,7 @@ class TBXProfilerCallback(TrainingSingleFileLoggingCallback):
     def handle_result(self, results: List[Dict], **info):
         if not results:
             return
-        results_to_log = {
-            i: result
-            for i, result in enumerate(results)
-            if not self._workers_to_log or i in self._workers_to_log
-        }
+        results_to_log = {i: result for i, result in enumerate(results)}
         for i, result in results_to_log.items():
             if PROFILER_KEY in result and result[PROFILER_KEY]:
                 for trace in result[PROFILER_KEY]:
